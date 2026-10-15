@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/report_provider.dart';
 import '../../data/models/shift_report_model.dart';
 import 'widgets/status_badge.dart';
+import '../../widgets/super_manager_report_card.dart';
 
 class ReportDetailAdminScreen extends StatelessWidget {
   final String reportId;
@@ -48,6 +49,10 @@ class ReportDetailAdminScreen extends StatelessWidget {
           children: [
             // ── Employee Info ──────────────────────────────────
             _employeeCard(context, report),
+            const SizedBox(height: 16),
+
+            // ── Super Manager Format Card ─────────────────────
+            SuperManagerReportCard.fromReport(report),
             const SizedBox(height: 16),
 
             // ── Deviation Hero ─────────────────────────────────

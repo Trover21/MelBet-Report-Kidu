@@ -9,6 +9,7 @@ import '../../providers/report_provider.dart';
 import '../../data/models/shift_report_model.dart';
 import '../../data/models/user_model.dart';
 import 'widgets/status_badge.dart';
+import '../../widgets/super_manager_report_card.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -32,6 +33,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   String _userFilter = 'all'; // 'all', 'pending', 'active', 'disabled'
+  int _selectedTodayShift = 1; // 1, 2, 3, or 0 (0 = 24H aggregate)
 
   @override
   void dispose() {
@@ -351,6 +353,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Widget _buildTodaysShiftStatus(BuildContext context, ReportProvider rp) {
     final todayReports = rp.todaysReports;
+    final s1 = todayReports.where((r) => r.shiftNumber == 1).firstOrNull;
+    final s2 = todayReports.where((r) => r.shiftNumber == 2).firstOrNull;
+    final s3 = todayReports.where((r) => r.shiftNumber == 3).firstOrNull;
+
+    // Determine current report to display
+    ShiftReport? selectedReport;
+    if (_selectedTodayShift == 1) selectedReport = s1;
+    if (_selectedTodayShift == 2) selectedReport = s2;
+    if (_selectedTodayShift == 3) selectedReport = s3;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -365,106 +376,227 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           Row(
             children: [
               const Icon(Icons.today_rounded,
-                  color: AppTheme.primary, size: 20),
+                  color: AppTheme.primary, size: 22),
               const SizedBox(width: 8),
-              Text(
-                "Today's Shifts — ${AppUtils.formatDate(DateTime.now())}",
-                style: Theme.of(context).textTheme.titleSmall,
+              Expanded(
+                child: Text(
+                  "Today's Shift Reports (${AppUtils.formatDate(DateTime.now())})",
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'Super Manager Format',
+                  style: TextStyle(
+                    color: AppTheme.accent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 16),
+
+          // ── Shift Selector Tabs ──────────────────────────────────
           Row(
-            children: List.generate(3, (i) {
-              final shift = i + 1;
-              final rep = todayReports
-                  .where((r) => r.shiftNumber == shift)
-                  .firstOrNull;
-              final hasReport = rep != null;
-              return Expanded(
-                child: Container(
-                  margin: EdgeInsets.only(right: i < 2 ? 8 : 0),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: hasReport
-                        ? AppTheme.success.withOpacity(0.1)
-                        : AppTheme.error.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: hasReport
-                          ? AppTheme.success.withOpacity(0.3)
-                          : AppTheme.error.withOpacity(0.3),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        hasReport
-                            ? Icons.check_circle_rounded
-                            : Icons.cancel_rounded,
-                        color: hasReport ? AppTheme.success : AppTheme.error,
-                        size: 28,
-                      ),
-                      const SizedBox(height: 6),
-                      Text('Shift $shift',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(fontWeight: FontWeight.w600)),
-                      if (hasReport)
-                        Text(
-                          AppUtils.formatDeviation(rep.deviation),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: rep.deviation >= 0
-                                ? AppTheme.deviationPositive
-                                : AppTheme.deviationNegative,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        )
-                      else
-                        Text('Missing',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: AppTheme.error)),
-                    ],
-                  ),
-                ),
-              );
-            }),
+            children: [
+              _shiftSelectorChip(
+                label: 'Shift 1',
+                shiftNum: 1,
+                hasReport: s1 != null,
+                dev: s1?.deviation,
+                isSelected: _selectedTodayShift == 1,
+                onTap: () => setState(() => _selectedTodayShift = 1),
+              ),
+              const SizedBox(width: 8),
+              _shiftSelectorChip(
+                label: 'Shift 2',
+                shiftNum: 2,
+                hasReport: s2 != null,
+                dev: s2?.deviation,
+                isSelected: _selectedTodayShift == 2,
+                onTap: () => setState(() => _selectedTodayShift = 2),
+              ),
+              const SizedBox(width: 8),
+              _shiftSelectorChip(
+                label: 'Shift 3',
+                shiftNum: 3,
+                hasReport: s3 != null,
+                dev: s3?.deviation,
+                isSelected: _selectedTodayShift == 3,
+                onTap: () => setState(() => _selectedTodayShift = 3),
+              ),
+              const SizedBox(width: 8),
+              _shiftSelectorChip(
+                label: '24H Total',
+                shiftNum: 0,
+                hasReport: todayReports.isNotEmpty,
+                dev: rp.todays24HourDeviation,
+                isSelected: _selectedTodayShift == 0,
+                onTap: () => setState(() => _selectedTodayShift = 0),
+              ),
+            ],
           ),
-          if (rp.todays24HourDeviation != null) ...[
-            const SizedBox(height: 12),
-            const Divider(),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('24-Hour Deviation',
-                    style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 16),
+
+          // ── Super Manager Format Report Card ─────────────────────
+          if (_selectedTodayShift == 0) ...[
+            // 24-Hour Aggregated Report
+            if (todayReports.isEmpty)
+              _emptyShiftState(context, 'No shifts submitted yet today')
+            else
+              _build24HourSuperManagerCard(context, rp, todayReports)
+          ] else ...[
+            // Single Shift Report
+            if (selectedReport != null)
+              SuperManagerReportCard.fromReport(selectedReport)
+            else
+              _emptyShiftState(
+                context,
+                'Shift $_selectedTodayShift has not been submitted yet today',
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _shiftSelectorChip({
+    required String label,
+    required int shiftNum,
+    required bool hasReport,
+    double? dev,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppTheme.primary.withOpacity(0.2)
+                : AppTheme.bgSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.primary
+                  : (hasReport
+                      ? AppTheme.bgBorder
+                      : AppTheme.error.withOpacity(0.3)),
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                  color: isSelected ? AppTheme.primary : AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 3),
+              if (hasReport && dev != null)
                 Text(
-                  AppUtils.formatDeviation(rp.todays24HourDeviation!),
+                  AppUtils.formatDeviation(dev),
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: rp.todays24HourDeviation! >= 0
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: dev >= 0
                         ? AppTheme.deviationPositive
                         : AppTheme.deviationNegative,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
+              else if (hasReport)
+                const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 14)
+              else
+                const Text(
+                  'Missing',
+                  style: TextStyle(color: AppTheme.error, fontSize: 9),
                 ),
-              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _build24HourSuperManagerCard(
+      BuildContext context, ReportProvider rp, List<ShiftReport> todayReports) {
+    final sorted = List<ShiftReport>.from(todayReports)
+      ..sort((a, b) => a.shiftNumber.compareTo(b.shiftNumber));
+
+    final first = sorted.first;
+    final last = sorted.last;
+
+    final initReady = first.initialReddy;
+    final initAcc = first.initialAccount;
+    final depComm = todayReports.fold(0.0, (s, r) => s + r.depositCommission);
+    final wdComm = todayReports.fold(0.0, (s, r) => s + r.withdrawalCommission);
+    final totComm = depComm + wdComm;
+    final endReady = last.endReddy;
+    final endAcc = last.endBalance + last.transferToNext;
+
+    final exp = initReady + initAcc + totComm;
+    final act = endReady + endAcc;
+    final dev = rp.todays24HourDeviation ?? (act - exp);
+
+    return SuperManagerReportCard(
+      title: '24-Hour Daily Total (${todayReports.length}/3 Shifts)',
+      date: DateTime.now(),
+      employeeName: todayReports.map((r) => 'S${r.shiftNumber}: ${r.employeeName}').join(', '),
+      initialReddy: initReady,
+      initialAccount: initAcc,
+      depositCommission: depComm,
+      withdrawalCommission: wdComm,
+      totalCommission: totComm,
+      endReddy: endReady,
+      endAccount: endAcc,
+      expected: exp,
+      actual: act,
+      deviation: dev,
+    );
+  }
+
+  Widget _emptyShiftState(BuildContext context, String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.schedule_rounded, color: AppTheme.warning, size: 36),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
             ),
-          ] else ...[
-            const SizedBox(height: 8),
-            const Center(
-              child: Text(
-                '⚠ 24-Hour result is incomplete — not all shifts submitted',
-                style: TextStyle(color: AppTheme.warning, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'The employee has not yet completed and submitted this shift report.',
+            style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
