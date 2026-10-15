@@ -73,9 +73,44 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.logout, color: AppTheme.textSecondary),
-                        onPressed: () {
-                          auth.logout();
-                          context.go('/login');
+                        tooltip: 'Log out',
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Row(
+                                children: [
+                                  Icon(Icons.logout_rounded, color: AppTheme.error, size: 22),
+                                  SizedBox(width: 8),
+                                  Text('Log Out'),
+                                ],
+                              ),
+                              content: const Text(
+                                'Do you want to log out?',
+                                style: TextStyle(fontSize: 15),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.error,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Log Out'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true && context.mounted) {
+                            await auth.logout();
+                            if (context.mounted) {
+                              context.go('/login');
+                            }
+                          }
                         },
                       ),
                     ],
