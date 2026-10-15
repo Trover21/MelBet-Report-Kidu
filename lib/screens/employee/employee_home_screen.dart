@@ -304,6 +304,42 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
                       color: devColor),
                 ],
               ),
+              if (report.status == ReportStatus.correctionRequested) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warning.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border:
+                        Border.all(color: AppTheme.warning.withOpacity(0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit_note,
+                          size: 16, color: AppTheme.warning),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          report.notes != null && report.notes!.isNotEmpty
+                              ? 'Admin: "${report.notes}" — Tap to edit & resubmit'
+                              : 'Correction requested by admin — Tap to edit & resubmit',
+                          style: const TextStyle(
+                            color: AppTheme.warning,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right,
+                          size: 16, color: AppTheme.warning),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),

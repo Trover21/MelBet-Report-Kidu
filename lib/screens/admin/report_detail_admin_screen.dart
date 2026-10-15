@@ -96,6 +96,12 @@ class ReportDetailAdminScreen extends StatelessWidget {
             ]),
             const SizedBox(height: 16),
 
+            // ── Correction Notes (if any) ─────────────────────
+            if (report.notes != null && report.notes!.isNotEmpty) ...[
+              _correctionNoteCard(context, report),
+              const SizedBox(height: 16),
+            ],
+
             // ── Admin Actions ──────────────────────────────────
             _adminActions(context, report, auth.user?.name ?? 'Admin'),
             const SizedBox(height: 40),
@@ -302,6 +308,43 @@ class ReportDetailAdminScreen extends StatelessWidget {
         ),
       );
 
+  Widget _correctionNoteCard(BuildContext context, ShiftReport report) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.warning.withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  color: AppTheme.warning, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Correction Request Notes',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppTheme.warning,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            report.notes!,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withOpacity(0.9),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _adminActions(
       BuildContext context, ShiftReport report, String adminName) {
     final rp = context.read<ReportProvider>();
@@ -356,14 +399,65 @@ class ReportDetailAdminScreen extends StatelessWidget {
                 ),
               OutlinedButton.icon(
                 onPressed: () async {
-                  await rp.updateStatus(
-                      report.id, ReportStatus.correctionRequested, adminName);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Correction requested'),
-                          backgroundColor: AppTheme.warning),
+                  final notesCtrl =
+                      TextEditingController(text: report.notes ?? '');
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Request Correction'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Provide instructions for ${report.employeeName} on what needs to be corrected:',
+                            style: Theme.of(ctx).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: notesCtrl,
+                            maxLines: 3,
+                            decoration: const InputDecoration(
+                              hintText:
+                                  'e.g., Initial Reddy balance does not match handover.',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.warning),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Send Request'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirmed == true) {
+                    await rp.updateStatus(
+                      report.id,
+                      ReportStatus.correctionRequested,
+                      adminName,
+                      notes: notesCtrl.text.trim().isNotEmpty
+                          ? notesCtrl.text.trim()
+                          : 'Please review and correct figures before resubmission.',
                     );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              'Correction requested. Employee can now edit and resend.'),
+                          backgroundColor: AppTheme.warning,
+                        ),
+                      );
+                    }
                   }
                 },
                 icon: const Icon(Icons.edit_outlined, size: 16),
@@ -372,6 +466,51 @@ class ReportDetailAdminScreen extends StatelessWidget {
                     foregroundColor: AppTheme.warning,
                     side: const BorderSide(color: AppTheme.warning)),
               ),
+              // ── Remove Report Button ───────────────────────────
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Remove Report'),
+                      content: Text(
+                        'Are you sure you want to delete this report from ${report.employeeName} (${report.shiftLabel})?\n\nThis action cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.error),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Delete Report'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    final ok = await rp.deleteReport(report.id);
+                    if (context.mounted && ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Report removed successfully'),
+                          backgroundColor: AppTheme.error,
+                        ),
+                      );
+                      context.pop();
+                    }
+                  }
+                },
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Remove Report'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.error,
+                  side: const BorderSide(color: AppTheme.error),
+                ),
+              ),
             ],
           ),
         ],
@@ -379,3 +518,4 @@ class ReportDetailAdminScreen extends StatelessWidget {
     );
   }
 }
+

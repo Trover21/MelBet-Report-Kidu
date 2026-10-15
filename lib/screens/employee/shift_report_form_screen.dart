@@ -12,7 +12,8 @@ import '../../providers/report_provider.dart';
 import '../../data/models/shift_report_model.dart';
 
 class ShiftReportFormScreen extends StatefulWidget {
-  const ShiftReportFormScreen({super.key});
+  final String? reportId;
+  const ShiftReportFormScreen({super.key, this.reportId});
 
   @override
   State<ShiftReportFormScreen> createState() => _ShiftReportFormScreenState();
@@ -21,6 +22,8 @@ class ShiftReportFormScreen extends StatefulWidget {
 class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
   final _formKey = GlobalKey<FormState>();
   static const _uuid = Uuid();
+
+  ShiftReport? _existingReport;
 
   // Selected values
   DateTime _operatingDate = DateTime.now();
@@ -55,6 +58,77 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
   double _calcExpected = 0;
   double _calcActual = 0;
   double _calcDeviation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.reportId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final existing = context
+            .read<ReportProvider>()
+            .reports
+            .where((r) => r.id == widget.reportId)
+            .firstOrNull;
+        if (existing != null) {
+          setState(() {
+            _existingReport = existing;
+            _operatingDate = existing.operatingDate;
+            _shiftNumber = existing.shiftNumber;
+            _initialReddy.text = existing.initialReddy > 0
+                ? existing.initialReddy.toStringAsFixed(2)
+                : '';
+            _initialAccount.text = existing.initialAccount > 0
+                ? existing.initialAccount.toStringAsFixed(2)
+                : '';
+            _totalDeposit.text = existing.totalDeposit > 0
+                ? existing.totalDeposit.toStringAsFixed(2)
+                : '';
+            _totalWithdrawal.text = existing.totalWithdrawal > 0
+                ? existing.totalWithdrawal.toStringAsFixed(2)
+                : '';
+            _endReddy.text = existing.endReddy > 0
+                ? existing.endReddy.toStringAsFixed(2)
+                : '';
+            _transferToNext.text = existing.transferToNext > 0
+                ? existing.transferToNext.toStringAsFixed(2)
+                : '';
+            _depositComplaint.text = existing.depositComplaintAccepted > 0
+                ? existing.depositComplaintAccepted.toStringAsFixed(2)
+                : '';
+            _withdrawalComplaint.text =
+                existing.withdrawalComplaintAccepted > 0
+                    ? existing.withdrawalComplaintAccepted.toStringAsFixed(2)
+                    : '';
+            _prevDayPending.text =
+                existing.prevDayPendingDepositApproved > 0
+                    ? existing.prevDayPendingDepositApproved.toStringAsFixed(2)
+                    : '';
+            _depositAfterShift.text = existing.depositOkAfterShift > 0
+                ? existing.depositOkAfterShift.toStringAsFixed(2)
+                : '';
+            _withdrawalAfterShift.text = existing.withdrawalOkAfterShift > 0
+                ? existing.withdrawalOkAfterShift.toStringAsFixed(2)
+                : '';
+            _depositBeforeShift.text = existing.depositOkBeforeShift > 0
+                ? existing.depositOkBeforeShift.toStringAsFixed(2)
+                : '';
+            _withdrawalBeforeShift.text =
+                existing.withdrawalApprovedBeforeShift > 0
+                    ? existing.withdrawalApprovedBeforeShift.toStringAsFixed(2)
+                    : '';
+            _totalUnprocessed.text = existing.totalUnprocessed > 0
+                ? existing.totalUnprocessed.toStringAsFixed(2)
+                : '';
+            _added.text =
+                existing.added > 0 ? existing.added.toStringAsFixed(2) : '';
+            _taken.text =
+                existing.taken > 0 ? existing.taken.toStringAsFixed(2) : '';
+            _recalculate();
+          });
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -136,7 +210,63 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
     final auth = context.read<AuthProvider>();
     final reportProv = context.read<ReportProvider>();
 
-    // Duplicate check
+    // ── Resubmit / Update existing report ────────────────────────
+    if (widget.reportId != null && _existingReport != null) {
+      final success = await reportProv.updateReport(_existingReport!.copyWith(
+        operatingDate: _operatingDate,
+        shiftNumber: _shiftNumber,
+        initialReddy: _val(_initialReddy),
+        initialAccount: _val(_initialAccount),
+        totalDeposit: _val(_totalDeposit),
+        totalWithdrawal: _val(_totalWithdrawal),
+        endReddy: _val(_endReddy),
+        transferToNext: _val(_transferToNext),
+        depositComplaintAccepted: _val(_depositComplaint),
+        withdrawalComplaintAccepted: _val(_withdrawalComplaint),
+        prevDayPendingDepositApproved: _val(_prevDayPending),
+        depositOkAfterShift: _val(_depositAfterShift),
+        withdrawalOkAfterShift: _val(_withdrawalAfterShift),
+        depositOkBeforeShift: _val(_depositBeforeShift),
+        withdrawalApprovedBeforeShift: _val(_withdrawalBeforeShift),
+        totalUnprocessed: _val(_totalUnprocessed),
+        added: _val(_added),
+        taken: _val(_taken),
+        endBalance: _calcEndBalance,
+        depositCommission: _calcDepComm,
+        withdrawalCommission: _calcWdComm,
+        totalCommission: _calcTotComm,
+        expectedAmount: _calcExpected,
+        actualAmount: _calcActual,
+        deviation: _calcDeviation,
+        lastModifiedAt: DateTime.now(),
+        status: ReportStatus.submitted, // Resubmitted for admin review
+      ));
+
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Report updated and resubmitted successfully!'),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        context.pop();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(reportProv.error ?? 'Failed to update report'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    // ── Create new report ─────────────────────────────────────────
     final isDup = await reportProv.submitReport(ShiftReport(
       id: _uuid.v4(),
       employeeId: auth.user!.id,
@@ -196,7 +326,9 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Submit Shift Report'),
+        title: Text(widget.reportId != null
+            ? 'Edit & Resubmit Report'
+            : 'Submit Shift Report'),
         leading: BackButton(onPressed: () => context.pop()),
         actions: [
           TextButton.icon(
@@ -214,6 +346,51 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
+              if (_existingReport?.notes != null &&
+                  _existingReport!.notes!.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warning.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                    border:
+                        Border.all(color: AppTheme.warning.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          color: AppTheme.warning, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Correction Requested by Admin:',
+                              style: TextStyle(
+                                color: AppTheme.warning,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _existingReport!.notes!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               // ── Date & Shift Selectors ──────────────────────────
               _sectionHeader('Operating Information'),
               const SizedBox(height: 12),
@@ -313,8 +490,12 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
                 height: 54,
                 child: ElevatedButton.icon(
                   onPressed: _isSubmitting ? null : _submit,
-                  icon: const Icon(Icons.send_rounded),
-                  label: const Text('Submit Report'),
+                  icon: Icon(widget.reportId != null
+                      ? Icons.check_circle_outline
+                      : Icons.send_rounded),
+                  label: Text(widget.reportId != null
+                      ? 'Resubmit Report to Admin'
+                      : 'Submit Report'),
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),

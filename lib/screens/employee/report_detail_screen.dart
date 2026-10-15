@@ -41,6 +41,12 @@ class ReportDetailScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            // ── Correction Requested Alert (if applicable) ────
+            if (report.status == ReportStatus.correctionRequested) ...[
+              _correctionRequestedBanner(context, report),
+              const SizedBox(height: 16),
+            ],
+
             // ── Deviation Hero ─────────────────────────────────
             _deviationHero(context, report, devColor),
             const SizedBox(height: 20),
@@ -85,8 +91,34 @@ class ReportDetailScreen extends StatelessWidget {
               _rowText(context, 'Submitted By', report.employeeName),
               _rowText(context, 'Submitted At', AppUtils.formatDateTime(report.submittedAt)),
               _rowText(context, 'Status', report.status.label),
+              if (report.notes != null && report.notes!.isNotEmpty)
+                _rowText(context, 'Notes', report.notes!),
             ]),
-            const SizedBox(height: 40),
+            const SizedBox(height: 24),
+
+            if (report.status == ReportStatus.correctionRequested) ...[
+              SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () =>
+                      context.push('/employee/report/${report.id}/edit'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.warning,
+                    foregroundColor: Colors.black87,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: const Icon(Icons.edit_note, size: 20),
+                  label: const Text(
+                    'Edit & Resubmit Report',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -270,6 +302,66 @@ class ReportDetailScreen extends StatelessWidget {
                   .textTheme
                   .bodyMedium
                   ?.copyWith(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _correctionRequestedBanner(BuildContext context, ShiftReport report) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.edit_note_rounded,
+                  color: AppTheme.warning, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Admin Requested Correction',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppTheme.warning,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+          if (report.notes != null && report.notes!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Admin Instructions: "${report.notes}"',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () =>
+                  context.push('/employee/report/${report.id}/edit'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.warning,
+                foregroundColor: Colors.black87,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.edit, size: 16),
+              label: const Text(
+                'Edit & Resubmit Now',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
         ],
       ),
     );

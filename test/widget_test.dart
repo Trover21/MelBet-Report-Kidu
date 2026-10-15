@@ -133,15 +133,15 @@ void main() {
       await repo.init();
 
       final admin = await repo.login('admin', 'admin123');
-      expect(admin, isNotNull);
-      expect(admin!.role, equals(UserRole.admin));
+      expect(admin.success, isTrue);
+      expect(admin.user?.role, equals(UserRole.admin));
 
       final emp = await repo.login('alem', 'emp123');
-      expect(emp, isNotNull);
-      expect(emp!.role, equals(UserRole.employee));
+      expect(emp.success, isTrue);
+      expect(emp.user?.role, equals(UserRole.employee));
 
       final invalid = await repo.login('alem', 'wrongpassword');
-      expect(invalid, isNull);
+      expect(invalid.success, isFalse);
     });
 
     test('Loads pre-populated seed reports', () async {

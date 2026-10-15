@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart';
 import '../data/models/shift_report_model.dart';
 import '../data/models/user_model.dart';
-import '../data/mock/mock_repository.dart';
+import '../data/repositories/app_repository.dart';
 import '../core/utils/app_utils.dart';
 
 class ReportProvider extends ChangeNotifier {
-  final MockRepository _repo;
+  final AppRepository _repo;
 
   List<ShiftReport> _reports = [];
   List<AppUser> _employees = [];
@@ -43,7 +43,6 @@ class ReportProvider extends ChangeNotifier {
   bool get isLoading => _loading;
   String? get error => _error;
 
-  // Filter setters
   DateTime? get filterStart => _filterStart;
   DateTime? get filterEnd => _filterEnd;
   String? get filterEmployeeId => _filterEmployeeId;
@@ -119,10 +118,43 @@ class ReportProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateStatus(
-      String reportId, ReportStatus status, String adminName) async {
+  Future<bool> updateReport(ShiftReport report) async {
     try {
-      final updated = await _repo.updateReportStatus(reportId, status, adminName);
+      final updated = await _repo.updateReport(report);
+      final idx = _reports.indexWhere((r) => r.id == report.id);
+      if (idx >= 0) {
+        _reports[idx] = updated;
+      } else {
+        _reports.add(updated);
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Failed to update report: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteReport(String reportId) async {
+    try {
+      await _repo.deleteReport(reportId);
+      _reports.removeWhere((r) => r.id == reportId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Failed to delete report: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> updateStatus(
+      String reportId, ReportStatus status, String adminName,
+      {String? notes}) async {
+    try {
+      final updated = await _repo.updateReportStatus(
+          reportId, status, adminName, notes: notes);
       final idx = _reports.indexWhere((r) => r.id == reportId);
       if (idx >= 0) _reports[idx] = updated;
       notifyListeners();
@@ -180,7 +212,6 @@ class ReportProvider extends ChangeNotifier {
     };
   }
 
-  /// Group reports by operating date, returns list of daily summaries
   List<DailySummary> getDailySummaries(List<ShiftReport> reports) {
     final byDate = <String, List<ShiftReport>>{};
     for (final r in reports) {

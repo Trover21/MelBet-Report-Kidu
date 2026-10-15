@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../screens/auth/login_screen.dart';
+import '../../screens/auth/forgot_password_screen.dart';
 import '../../screens/employee/employee_home_screen.dart';
 import '../../screens/employee/shift_report_form_screen.dart';
 import '../../screens/employee/report_detail_screen.dart';
@@ -14,11 +15,13 @@ final GoRouter appRouter = GoRouter(
   redirect: (context, state) {
     final auth = context.read<AuthProvider>();
     final isLoggedIn = auth.isAuthenticated;
-    final isLogin = state.matchedLocation == '/login';
+    final publicRoutes = ['/login', '/forgot-password'];
+    final isPublic = publicRoutes.contains(state.matchedLocation);
 
-    if (!isLoggedIn && !isLogin) return '/login';
-    if (isLoggedIn && isLogin) {
-      return auth.isAdmin ? '/admin' : '/employee';
+    if (!isLoggedIn && !isPublic) return '/login';
+    if (isLoggedIn && isPublic) {
+      // Both admin and manager go to the admin/privileged dashboard
+      return auth.isPrivileged ? '/admin' : '/employee';
     }
     return null;
   },
@@ -27,6 +30,11 @@ final GoRouter appRouter = GoRouter(
       path: '/login',
       name: 'login',
       builder: (ctx, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      name: 'forgot-password',
+      builder: (ctx, state) => const ForgotPasswordScreen(),
     ),
     // ── Employee Routes ──────────────────────────────────────────
     GoRoute(
@@ -45,9 +53,15 @@ final GoRouter appRouter = GoRouter(
           builder: (ctx, state) =>
               ReportDetailScreen(reportId: state.pathParameters['id']!),
         ),
+        GoRoute(
+          path: 'report/:id/edit',
+          name: 'employee-report-edit',
+          builder: (ctx, state) =>
+              ShiftReportFormScreen(reportId: state.pathParameters['id']),
+        ),
       ],
     ),
-    // ── Admin Routes ─────────────────────────────────────────────
+    // ── Admin + Manager Routes ───────────────────────────────────
     GoRoute(
       path: '/admin',
       name: 'admin-dashboard',

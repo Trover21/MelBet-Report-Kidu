@@ -7,6 +7,7 @@ import '../../core/utils/app_utils.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/report_provider.dart';
 import '../../data/models/shift_report_model.dart';
+import '../../data/models/user_model.dart';
 import 'widgets/status_badge.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -23,11 +24,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ReportProvider>().loadAll();
+      context.read<AuthProvider>().loadAllUsers();
     });
   }
+
+  String _userFilter = 'all'; // 'all', 'pending', 'active', 'disabled'
 
   @override
   void dispose() {
@@ -61,6 +65,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     _buildOverviewTab(context, reports),
                     _buildReportsTab(context, reports),
                     _buildDailyTab(context, reports),
+                    _buildUsersTab(context, auth),
                   ],
                 ),
               ),
@@ -90,8 +95,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Admin Dashboard',
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                auth.user?.role == UserRole.manager
+                    ? 'Manager Dashboard'
+                    : 'Admin Dashboard',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               Text(AppUtils.formatDate(DateTime.now()),
                   style: Theme.of(context).textTheme.bodySmall),
             ],
@@ -116,6 +125,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   Widget _buildTabBar() {
+    final pendingCount = context.watch<AuthProvider>().pendingUsers.length;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       decoration: BoxDecoration(
@@ -134,10 +145,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         labelColor: Colors.white,
         unselectedLabelColor: AppTheme.textSecondary,
         labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        tabs: const [
-          Tab(text: 'Overview'),
-          Tab(text: 'Reports'),
-          Tab(text: 'Daily'),
+        tabs: [
+          const Tab(text: 'Overview'),
+          const Tab(text: 'Reports'),
+          const Tab(text: 'Daily'),
+          Tab(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Users'),
+                if (pendingCount > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.error,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$pendingCount',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -794,6 +832,497 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       color: AppTheme.error, fontWeight: FontWeight.w700)),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Users & Approvals Tab ───────────────────────────────────────
+  Widget _buildUsersTab(BuildContext context, AuthProvider auth) {
+    final allUsers = auth.allUsers;
+    final pending = allUsers.where((u) => !u.isApproved).toList();
+    final active = allUsers.where((u) => u.isApproved && u.isActive).toList();
+    final disabled =
+        allUsers.where((u) => u.isApproved && !u.isActive).toList();
+
+    List<dynamic> displayedUsers;
+    if (_userFilter == 'pending') {
+      displayedUsers = pending;
+    } else if (_userFilter == 'active') {
+      displayedUsers = active;
+    } else if (_userFilter == 'disabled') {
+      displayedUsers = disabled;
+    } else {
+      displayedUsers = allUsers;
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        // ── Header ─────────────────────────────────────────────
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'User Management',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Text(
+                  '${allUsers.length} registered account(s) • ${pending.length} pending approval',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, color: AppTheme.accent),
+              onPressed: () => auth.loadAllUsers(),
+              tooltip: 'Refresh user list',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (!auth.isStrictAdmin)
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: AppTheme.primary, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Manager View: You have full visibility into employees and reports. User approvals & account status changes are managed by Administrators.',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // ── Filter Chips ───────────────────────────────────────
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _filterChip('all', 'All (${allUsers.length})'),
+              const SizedBox(width: 8),
+              _filterChip('pending', 'Pending (${pending.length})',
+                  badgeColor: pending.isNotEmpty ? AppTheme.warning : null),
+              const SizedBox(width: 8),
+              _filterChip('active', 'Active (${active.length})',
+                  badgeColor: AppTheme.success),
+              const SizedBox(width: 8),
+              _filterChip('disabled', 'Disabled (${disabled.length})',
+                  badgeColor: disabled.isNotEmpty ? AppTheme.error : null),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ── Empty State ────────────────────────────────────────
+        if (displayedUsers.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Column(
+                children: [
+                  const Icon(Icons.people_outline,
+                      size: 56, color: AppTheme.textMuted),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No users found in this category',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ...displayedUsers
+              .map((user) => _buildManagedUserCard(context, auth, user)),
+      ],
+    );
+  }
+
+  Widget _filterChip(String key, String label, {Color? badgeColor}) {
+    final isSelected = _userFilter == key;
+    return GestureDetector(
+      onTap: () => setState(() => _userFilter = key),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primary : AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? AppTheme.primary
+                : (badgeColor?.withOpacity(0.4) ?? AppTheme.bgBorder),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : AppTheme.textSecondary,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildManagedUserCard(
+      BuildContext context, AuthProvider auth, dynamic user) {
+    final isPending = !user.isApproved;
+    final isActive = user.isApproved && user.isActive;
+    final isDisabled = user.isApproved && !user.isActive;
+
+    Color statusColor;
+    String statusLabel;
+    if (isPending) {
+      statusColor = AppTheme.warning;
+      statusLabel = 'Pending Approval';
+    } else if (isActive) {
+      statusColor = AppTheme.success;
+      statusLabel = 'Active';
+    } else {
+      statusColor = AppTheme.error;
+      statusLabel = 'Disabled';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDisabled
+              ? AppTheme.error.withOpacity(0.3)
+              : AppTheme.bgBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: statusColor.withOpacity(0.18),
+            child: Text(
+              user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+              style: TextStyle(
+                color: statusColor,
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        user.name,
+                        style:
+                            Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (user.role.name == 'admin') ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'ADMIN',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.accent,
+                          ),
+                        ),
+                      ),
+                    ] else if (user.role.name == 'manager') ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'MANAGER',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'EMPLOYEE',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.tealAccent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '@${user.username} • ${user.email ?? "No email"}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textMuted,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: statusColor.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // ── Actions (Admin Only) ─────────────────────────────
+          if (isPending) ...[
+            if (auth.isStrictAdmin) ...[
+              // Reject Sign Up
+              IconButton(
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Reject Registration'),
+                      content: Text(
+                          'Reject sign-up request for ${user.name}? This will remove the request.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.error),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Reject'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    final ok = await auth.rejectUser(user.id);
+                    if (context.mounted && ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Registration for ${user.name} rejected'),
+                          backgroundColor: AppTheme.error,
+                        ),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.close, color: AppTheme.error),
+                tooltip: 'Reject request',
+              ),
+              // Approve Sign Up
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final ok = await auth.approveUser(user.id);
+                  if (context.mounted && ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            'Approved ${user.name}! They can now log in.'),
+                        backgroundColor: AppTheme.success,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.success,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.check, size: 16),
+                label: const Text('Approve'),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_clock, size: 13, color: AppTheme.warning),
+                    SizedBox(width: 4),
+                    Text(
+                      'Admin Only',
+                      style: TextStyle(
+                        color: AppTheme.warning,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ] else if (auth.isStrictAdmin && isActive && user.role.name != 'admin') ...[
+            // Disable User (when user interrupts or leaves job)
+            OutlinedButton.icon(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Disable User Account'),
+                    content: Text(
+                        'Are you sure you want to disable ${user.name}?\n\nThey will be prevented from logging in or submitting shifts until re-enabled by an admin.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.error),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Disable Account'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  final ok = await auth.setUserActive(user.id, false);
+                  if (context.mounted && ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${user.name} has been disabled'),
+                        backgroundColor: AppTheme.warning,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.error,
+                side: const BorderSide(color: AppTheme.error),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.block, size: 14),
+              label: const Text('Disable'),
+            ),
+          ] else if (auth.isStrictAdmin && isDisabled) ...[
+            // Re-Enable User
+            ElevatedButton.icon(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Enable User Account'),
+                    content: Text(
+                        'Re-activate account for ${user.name}? They will be able to log in again.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.success),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Re-Enable'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  final ok = await auth.setUserActive(user.id, true);
+                  if (context.mounted && ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            '${user.name} re-enabled! They can now log in.'),
+                        backgroundColor: AppTheme.success,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.success,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.check_circle_outline, size: 15),
+              label: const Text('Enable'),
+            ),
+          ],
+        ],
       ),
     );
   }
