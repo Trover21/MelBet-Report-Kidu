@@ -28,7 +28,7 @@ async function updateAdmin() {
     username: 'kidu',
     passwordHash: 'zemakidoo', // hook will bcrypt this
     role: 'admin',
-    email: 'kidu@melbet.com',
+    email: 'zemakidoo2015@gmail.com',
     isApproved: true,
     isActive: true,
   });
