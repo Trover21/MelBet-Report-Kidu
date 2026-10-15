@@ -1047,7 +1047,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (user.role.name == 'admin') ...[
+                    if (user.role == UserRole.admin) ...[
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1065,7 +1065,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           ),
                         ),
                       ),
-                    ] else if (user.role.name == 'manager') ...[
+                    ] else if (user.role == UserRole.manager) ...[
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1225,7 +1225,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ),
               ),
             ],
-          ] else if (auth.isStrictAdmin && isActive && user.role.name != 'admin') ...[
+          ] else if (auth.isStrictAdmin && isActive && user.role != UserRole.admin) ...[
             // Disable User (when user interrupts or leaves job)
             OutlinedButton.icon(
               onPressed: () async {

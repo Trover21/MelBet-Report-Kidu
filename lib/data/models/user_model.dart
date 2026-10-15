@@ -24,6 +24,8 @@ extension UserRoleExt on UserRole {
     }
   }
 
+  String get name => value;
+
   /// Manager has the same UI privileges as admin
   bool get isPrivileged => this == UserRole.admin || this == UserRole.manager;
 
