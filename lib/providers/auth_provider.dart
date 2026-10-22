@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../data/models/user_model.dart';
+import '../data/models/team_request_model.dart';
 import '../data/repositories/app_repository.dart';
 
 enum AuthState { initial, loading, authenticated, unauthenticated, error }
@@ -66,6 +67,9 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required String name,
     required String role, // 'employee' | 'manager'
+    int teamNumber = 1,
+    String? teamName,
+    List<String>? teams,
   }) async {
     _state = AuthState.loading;
     _errorMessage = null;
@@ -78,6 +82,9 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         name: name,
         role: role,
+        teamNumber: teamNumber,
+        teamName: teamName,
+        teams: teams,
       );
       _state = AuthState.unauthenticated;
       notifyListeners();
@@ -94,6 +101,136 @@ class AuthProvider extends ChangeNotifier {
       return await _repo.sendCredentialsByEmail(email);
     } catch (e) {
       return 'Something went wrong. Please try again.';
+    }
+  }
+
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      return await _repo.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+    } catch (e) {
+      return 'Failed to change password. Please try again.';
+    }
+  }
+
+  // ── Teams & Requests ──────────────────────────────────────────
+  List<String> _teams = [];
+  List<TeamRequest> _teamRequests = [];
+
+  List<String> get teams => _teams;
+  List<TeamRequest> get teamRequests => _teamRequests;
+
+  Future<void> loadTeams() async {
+    try {
+      _teams = await _repo.getTeams();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<String?> addTeam(String name, {String? description}) async {
+    try {
+      final err = await _repo.addTeam(name, description: description);
+      if (err == null) {
+        await loadTeams();
+      }
+      return err;
+    } catch (e) {
+      return 'Failed to add team';
+    }
+  }
+
+  Future<String?> removeTeam(String name) async {
+    try {
+      final err = await _repo.removeTeam(name);
+      if (err == null) {
+        await loadTeams();
+      }
+      return err;
+    } catch (e) {
+      return 'Failed to remove team';
+    }
+  }
+
+  Future<String?> removeManagerTeam(String teamName) async {
+    try {
+      final err = await _repo.removeManagerTeam(teamName);
+      if (err == null) {
+        if (_user != null) {
+          final updatedTeams = List<String>.from(_user!.teams)..remove(teamName);
+          final updatedTeamName = _user!.teamName == teamName
+              ? (updatedTeams.isNotEmpty ? updatedTeams.first : 'Team 1')
+              : _user!.teamName;
+          _user = _user!.copyWith(teams: updatedTeams, teamName: updatedTeamName);
+        }
+        notifyListeners();
+      }
+      return err;
+    } catch (e) {
+      return 'Failed to remove team';
+    }
+  }
+
+  Future<void> loadTeamRequests() async {
+    try {
+      _teamRequests = await _repo.getTeamRequests();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<String?> requestTeams(List<String> requestedTeams, {String? reason}) async {
+    try {
+      final err = await _repo.requestTeams(
+        requestedTeams: requestedTeams,
+        reason: reason,
+      );
+      if (err == null) {
+        await loadTeamRequests();
+      }
+      return err;
+    } catch (e) {
+      return 'Failed to submit team request';
+    }
+  }
+
+  Future<String?> approveTeamRequest(String requestId) async {
+    try {
+      final err = await _repo.approveTeamRequest(requestId);
+      if (err == null) {
+        await loadTeamRequests();
+        await loadAllUsers();
+      }
+      return err;
+    } catch (e) {
+      return 'Failed to approve request';
+    }
+  }
+
+  Future<String?> rejectTeamRequest(String requestId) async {
+    try {
+      final err = await _repo.rejectTeamRequest(requestId);
+      if (err == null) {
+        await loadTeamRequests();
+      }
+      return err;
+    } catch (e) {
+      return 'Failed to reject request';
+    }
+  }
+
+  Future<String?> cancelTeamRequest(String requestId) async {
+    try {
+      final err = await _repo.cancelTeamRequest(requestId);
+      if (err == null) {
+        await loadTeamRequests();
+      }
+      return err;
+    } catch (e) {
+      return 'Failed to cancel request';
     }
   }
 
@@ -142,6 +279,18 @@ class AuthProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       return false;
+    }
+  }
+
+  Future<String?> deleteUser(String userId) async {
+    try {
+      final err = await _repo.deleteUser(userId);
+      if (err == null) {
+        await loadAllUsers();
+      }
+      return err;
+    } catch (e) {
+      return 'Failed to remove user';
     }
   }
 

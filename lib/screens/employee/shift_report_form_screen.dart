@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/app_utils.dart';
-import '../../core/constants/app_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/report_provider.dart';
 import '../../data/models/shift_report_model.dart';
@@ -28,6 +27,10 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
   // Selected values
   DateTime _operatingDate = DateTime.now();
   int _shiftNumber = 1;
+
+  // Free-form shift time controllers (employee fills in e.g. "06:30")
+  final _shiftStartCtrl = TextEditingController();
+  final _shiftEndCtrl   = TextEditingController();
 
   // Form controllers
   final _initialReddy = TextEditingController();
@@ -69,11 +72,14 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
             .reports
             .where((r) => r.id == widget.reportId)
             .firstOrNull;
+
         if (existing != null) {
           setState(() {
             _existingReport = existing;
             _operatingDate = existing.operatingDate;
             _shiftNumber = existing.shiftNumber;
+            _shiftStartCtrl.text = existing.shiftStartTime;
+            _shiftEndCtrl.text   = existing.shiftEndTime;
             _initialReddy.text = existing.initialReddy > 0
                 ? existing.initialReddy.toStringAsFixed(2)
                 : '';
@@ -133,6 +139,7 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
   @override
   void dispose() {
     for (final c in [
+      _shiftStartCtrl, _shiftEndCtrl,
       _initialReddy, _initialAccount, _totalDeposit, _totalWithdrawal,
       _endReddy, _transferToNext, _depositComplaint, _withdrawalComplaint,
       _prevDayPending, _depositAfterShift, _withdrawalAfterShift,
@@ -149,7 +156,6 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
 
   void _recalculate() {
     final eb = AppUtils.endBalance(
-      initialReddy: _val(_initialReddy),
       initialAccount: _val(_initialAccount),
       totalDeposit: _val(_totalDeposit),
       totalWithdrawal: _val(_totalWithdrawal),
@@ -163,27 +169,15 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
     final depComm = AppUtils.depositCommission(_val(_totalDeposit));
     final wdComm = AppUtils.withdrawalCommission(_val(_totalWithdrawal));
     final totComm = AppUtils.totalCommission(depComm, wdComm);
-    final expected = AppUtils.expectedAmount(
-      initialReddy: _val(_initialReddy),
-      initialAccount: _val(_initialAccount),
-      totalCommission: totComm,
-    );
-    final actual = AppUtils.actualAmount(
-      endReddy: _val(_endReddy),
-      endBalance: eb,
-      transferToNext: _val(_transferToNext),
-    );
-    final dev = AppUtils.shiftDeviation(
-        actualAmount: actual, expectedAmount: expected);
 
     setState(() {
       _calcEndBalance = eb;
       _calcDepComm = depComm;
       _calcWdComm = wdComm;
       _calcTotComm = totComm;
-      _calcExpected = expected;
-      _calcActual = actual;
-      _calcDeviation = dev;
+      _calcExpected = 0;
+      _calcActual = 0;
+      _calcDeviation = 0;
       _showCalculations = true;
     });
   }
@@ -209,12 +203,15 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
 
     final auth = context.read<AuthProvider>();
     final reportProv = context.read<ReportProvider>();
+    final isPrivileged = auth.isPrivileged;
 
     // ── Resubmit / Update existing report ────────────────────────
     if (widget.reportId != null && _existingReport != null) {
       final success = await reportProv.updateReport(_existingReport!.copyWith(
         operatingDate: _operatingDate,
         shiftNumber: _shiftNumber,
+        shiftStartTime: _shiftStartCtrl.text.trim(),
+        shiftEndTime:   _shiftEndCtrl.text.trim(),
         initialReddy: _val(_initialReddy),
         initialAccount: _val(_initialAccount),
         totalDeposit: _val(_totalDeposit),
@@ -239,7 +236,9 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
         actualAmount: _calcActual,
         deviation: _calcDeviation,
         lastModifiedAt: DateTime.now(),
-        status: ReportStatus.submitted, // Resubmitted for admin review
+        status: isPrivileged
+            ? _existingReport!.status
+            : ReportStatus.submitted,
       ));
 
       if (!mounted) return;
@@ -247,8 +246,12 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Report updated and resubmitted successfully!'),
+          SnackBar(
+            content: Text(
+              isPrivileged
+                  ? 'Report updated successfully! Calculations updated.'
+                  : 'Report updated and resubmitted successfully!',
+            ),
             backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
@@ -271,8 +274,12 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
       id: _uuid.v4(),
       employeeId: auth.user!.id,
       employeeName: auth.user!.name,
+      teamNumber: auth.user!.teamNumber,
+      teamName: auth.user!.teamName,
       operatingDate: _operatingDate,
       shiftNumber: _shiftNumber,
+      shiftStartTime: _shiftStartCtrl.text.trim(),
+      shiftEndTime: _shiftEndCtrl.text.trim(),
       initialReddy: _val(_initialReddy),
       initialAccount: _val(_initialAccount),
       totalDeposit: _val(_totalDeposit),
@@ -324,10 +331,13 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.read<AuthProvider>();
+    final isPrivileged = auth.isPrivileged;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.reportId != null
-            ? 'Edit & Resubmit Report'
+            ? (isPrivileged ? 'Edit Shift Report' : 'Edit & Resubmit Report')
             : 'Submit Shift Report'),
         leading: BackButton(onPressed: () => context.pop()),
         actions: [
@@ -346,6 +356,33 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
+              if (_existingReport != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.primary.withOpacity(0.35)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person_pin_rounded, color: AppTheme.primary, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Editing report for ${_existingReport!.employeeName} • ${_existingReport!.teamName}',
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (_existingReport?.notes != null &&
                   _existingReport!.notes!.isNotEmpty) ...[
                 Container(
@@ -399,6 +436,23 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
                   Expanded(child: _buildDateSelector()),
                   const SizedBox(width: 12),
                   Expanded(child: _buildShiftSelector()),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // ── Shift Time Range (free-form — employee fills in) ──
+              Row(
+                children: [
+                  Expanded(child: _buildTimeField(
+                    label: 'Shift Start Time',
+                    icon: Icons.play_circle_outline,
+                    ctrl: _shiftStartCtrl,
+                  )),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildTimeField(
+                    label: 'Shift End Time',
+                    icon: Icons.stop_circle_outlined,
+                    ctrl: _shiftEndCtrl,
+                  )),
                 ],
               ),
               const SizedBox(height: 24),
@@ -494,7 +548,9 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
                       ? Icons.check_circle_outline
                       : Icons.send_rounded),
                   label: Text(widget.reportId != null
-                      ? 'Resubmit Report to Admin'
+                      ? (isPrivileged
+                          ? 'Save Report Changes'
+                          : 'Resubmit Report to Admin')
                       : 'Submit Report'),
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
@@ -587,15 +643,52 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
             return DropdownMenuItem(
               value: num,
               child: Text(
-                  '${AppConstants.shiftNames[i]}\n${AppConstants.shiftTimes[i]}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.textPrimary,
-                      )),
+                'Shift $num',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textPrimary,
+                    )),
             );
           }),
           onChanged: (v) => setState(() => _shiftNumber = v ?? 1),
         ),
       ),
+    );
+  }
+
+  /// Free-form time text field — employee types e.g. "06:30" or "14:00".
+  Widget _buildTimeField({
+    required String label,
+    required IconData icon,
+    required TextEditingController ctrl,
+  }) {
+    return TextFormField(
+      controller: ctrl,
+      keyboardType: TextInputType.datetime,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: 'e.g. 06:30',
+        prefixIcon: Icon(icon, size: 18, color: AppTheme.textMuted),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppTheme.bgBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppTheme.bgBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppTheme.primary.withOpacity(0.7)),
+        ),
+        filled: true,
+        fillColor: AppTheme.bgSurface,
+      ),
+      validator: (v) {
+        if (v == null || v.trim().isEmpty) return null; // optional
+        final ok = RegExp(r'^\d{1,2}:\d{2}$').hasMatch(v.trim());
+        if (!ok) return 'Use HH:MM format';
+        return null;
+      },
     );
   }
 
@@ -617,7 +710,7 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
             ?.copyWith(color: AppTheme.textMuted),
       ),
       onChanged: (_) {
-        if (_showCalculations) _recalculate();
+        _recalculate();
       },
       validator: required
           ? (v) {
@@ -630,81 +723,71 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
   }
 
   Widget _buildCalcCard() {
-    final devColor = _calcDeviation > 0
-        ? AppTheme.deviationPositive
-        : _calcDeviation < 0
-            ? AppTheme.deviationNegative
-            : AppTheme.deviationZero;
-
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.accent.withOpacity(0.4)),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primary.withOpacity(0.1),
-            blurRadius: 16,
+            color: AppTheme.primary.withOpacity(0.08),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.calculate_rounded,
-                  color: AppTheme.accent, size: 20),
-              const SizedBox(width: 8),
-              Text('Calculated Results',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppTheme.accent,
-                      )),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 12),
-          _calcRow('End Balance', _calcEndBalance),
-          _calcRow('Deposit Commission (3%)', _calcDepComm,
-              color: AppTheme.success),
-          _calcRow('Withdrawal Commission (2%)', _calcWdComm,
-              color: AppTheme.success),
-          _calcRow('Total Commission', _calcTotComm, color: AppTheme.success),
-          const Divider(),
-          _calcRow('Expected Amount', _calcExpected),
-          _calcRow('Actual Amount', _calcActual),
-          const Divider(),
-          _calcRow('Deviation', _calcDeviation,
-              color: devColor,
-              isDeviation: true,
-              isBold: true),
-        ],
-      ),
-    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0);
-  }
-
-  Widget _calcRow(String label, double value,
-      {Color? color, bool isDeviation = false, bool isBold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          Text(
-            isDeviation
-                ? AppUtils.formatDeviation(value)
-                : AppUtils.formatCurrency(value),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: color ?? AppTheme.textPrimary,
-                  fontWeight:
-                      isBold ? FontWeight.w700 : FontWeight.w600,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                child: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: AppTheme.accent,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'End Balance',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    'Total Comm: ${AppUtils.formatCurrency(_calcTotComm)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.success,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Text(
+            AppUtils.formatCurrency(_calcEndBalance),
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.accent,
+            ),
           ),
         ],
       ),
-    );
+    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0);
   }
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
@@ -24,12 +23,6 @@ class ReportDetailScreen extends StatelessWidget {
       );
     }
 
-    final devColor = report.deviation > 0
-        ? AppTheme.deviationPositive
-        : report.deviation < 0
-            ? AppTheme.deviationNegative
-            : AppTheme.deviationZero;
-
     return Scaffold(
       appBar: AppBar(
         title: Text('${report.shiftLabel} — ${AppUtils.formatDate(report.operatingDate)}'),
@@ -47,14 +40,6 @@ class ReportDetailScreen extends StatelessWidget {
               const SizedBox(height: 16),
             ],
 
-            // ── Deviation Hero ─────────────────────────────────
-            _deviationHero(context, report, devColor),
-            const SizedBox(height: 20),
-
-            // ── Commission Summary ────────────────────────────
-            _commissionCard(context, report),
-            const SizedBox(height: 20),
-
             // ── Input Fields ──────────────────────────────────
             _sectionCard(context, 'Opening Balances', [
               _row(context, 'Initial Reddy', report.initialReddy),
@@ -69,8 +54,6 @@ class ReportDetailScreen extends StatelessWidget {
             _sectionCard(context, 'Closing', [
               _row(context, 'End Reddy', report.endReddy),
               _row(context, 'Transfer to Next', report.transferToNext),
-              _row(context, 'End Balance', report.endBalance,
-                  color: AppTheme.accent),
             ]),
             const SizedBox(height: 12),
             _sectionCard(context, 'Complaints & Adjustments', [
@@ -81,19 +64,20 @@ class ReportDetailScreen extends StatelessWidget {
               _row(context, 'Taken', report.taken),
             ]),
             const SizedBox(height: 12),
-            _sectionCard(context, 'Calculated Results', [
-              _row(context, 'Expected Amount', report.expectedAmount),
-              _row(context, 'Actual Amount', report.actualAmount),
-              _rowDev(context, 'Deviation', report.deviation, devColor),
-            ]),
-            const SizedBox(height: 12),
             _sectionCard(context, 'Submission Info', [
               _rowText(context, 'Submitted By', report.employeeName),
+              _rowText(context, 'Team', report.teamName),
+              if (report.shiftStartTime.isNotEmpty && report.shiftEndTime.isNotEmpty)
+                _rowText(context, 'Shift Time', '${report.shiftStartTime} – ${report.shiftEndTime}'),
               _rowText(context, 'Submitted At', AppUtils.formatDateTime(report.submittedAt)),
               _rowText(context, 'Status', report.status.label),
               if (report.notes != null && report.notes!.isNotEmpty)
                 _rowText(context, 'Notes', report.notes!),
             ]),
+            const SizedBox(height: 16),
+
+            // ── End Balance at Bottom of Report ────────────────
+            _buildEndBalanceCard(context, report),
             const SizedBox(height: 24),
 
             if (report.status == ReportStatus.correctionRequested) ...[
@@ -125,103 +109,73 @@ class ReportDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _deviationHero(BuildContext context, ShiftReport r, Color color) {
+  Widget _buildEndBalanceCard(BuildContext context, ShiftReport report) {
     return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withOpacity(0.2), AppTheme.bgCard],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Shift Deviation',
-                    style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 6),
-                Text(
-                  AppUtils.formatDeviation(r.deviation),
-                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          Icon(
-            r.deviation > 0
-                ? Icons.trending_up_rounded
-                : r.deviation < 0
-                    ? Icons.trending_down_rounded
-                    : Icons.trending_flat_rounded,
-            color: color,
-            size: 56,
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 500.ms);
-  }
-
-  Widget _commissionCard(BuildContext context, ShiftReport r) {
-    return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.bgBorder),
-      ),
-      child: Row(
-        children: [
-          _commItem(context, 'Deposit\nComm (3%)',
-              AppUtils.formatCurrency(r.depositCommission)),
-          _divider(),
-          _commItem(context, 'Withdrawal\nComm (2%)',
-              AppUtils.formatCurrency(r.withdrawalCommission)),
-          _divider(),
-          _commItem(context, 'Total\nCommission',
-              AppUtils.formatCurrency(r.totalCommission),
-              highlight: true),
+        border: Border.all(color: AppTheme.accent.withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withOpacity(0.08),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
-    ).animate().fadeIn(delay: 100.ms);
-  }
-
-  Widget _commItem(BuildContext context, String label, String value,
-      {bool highlight = false}) {
-    return Expanded(
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: highlight ? AppTheme.accent : AppTheme.success,
-                  fontWeight: FontWeight.w700,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-            textAlign: TextAlign.center,
+                child: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: AppTheme.accent,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'End Balance',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    'Closing calculated balance',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(label,
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center),
+          Text(
+            AppUtils.formatCurrency(report.endBalance),
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.accent,
+            ),
+          ),
         ],
       ),
     );
   }
-
-  Widget _divider() => const VerticalDivider(
-        width: 1,
-        color: AppTheme.bgBorder,
-        indent: 8,
-        endIndent: 8,
-      );
 
   Widget _sectionCard(
       BuildContext context, String title, List<Widget> rows) {
@@ -269,26 +223,6 @@ class ReportDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _rowDev(
-      BuildContext context, String label, double value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          Text(
-            AppUtils.formatDeviation(value),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _rowText(BuildContext context, String label, String value) {
     return Padding(

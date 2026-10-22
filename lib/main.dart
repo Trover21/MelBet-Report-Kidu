@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
@@ -10,6 +11,8 @@ import 'providers/report_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Disable runtime font downloads — fonts are bundled locally
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

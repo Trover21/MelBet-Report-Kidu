@@ -21,10 +21,9 @@ void main() {
     });
 
     test('Calculates End Balance according to business formula', () {
-      // Formula: (Initial Reddy + Initial Account + Total Deposit + Total Unprocessed + Added)
-      //        - (Transfer to Next + Deposit Complaint + Withdrawal Complaint + Taken)
+      // Formula: (Initial Account + Total Deposit + Total Unprocessed + Added)
+      //        - (Transfer to Next + Deposit Complaint + Withdrawal Complaint + Total Withdrawal + Taken)
       final endBalance = AppUtils.endBalance(
-        initialReddy: 10000.0,
         initialAccount: 50000.0,
         totalDeposit: 25000.0,
         totalWithdrawal: 15000.0,
@@ -36,41 +35,45 @@ void main() {
         taken: 200.0,
       );
 
-      // (10,000 + 50,000 + 25,000 + 2,000 + 500) - (12,000 + 1,000 + 500 + 200)
-      // = 87,500 - 13,700 = 73,800
-      expect(endBalance, equals(73800.0));
+      // (50,000 + 25,000 + 2,000 + 500) - (12,000 + 1,000 + 500 + 15,000 + 200)
+      // = 77,500 - 28,700 = 48,800
+      expect(endBalance, equals(48800.0));
     });
 
-    test('Calculates Expected Amount, Actual Amount and Shift Deviation', () {
-      const initialReddy = 10000.0;
-      const initialAccount = 40000.0;
-      const totalCommission = 2500.0;
-
+    test('Calculates Daily Expected Amount and Actual Amount (multi-shift)', () {
+      // Expected: S1 InitReddy + S1 InitAccount + S2 EndBalance + S3 EndBalance
+      //           + TotalCommission + TotalUnprocessed + Added - DepositComplaint - Taken
       final expected = AppUtils.expectedAmount(
-        initialReddy: initialReddy,
-        initialAccount: initialAccount,
-        totalCommission: totalCommission,
+        initialReddyS1: 10000.0,
+        initialAccountS1: 40000.0,
+        endBalanceS2: 30000.0,
+        endBalanceS3: 25000.0,
+        totalCommissionAll: 2500.0,
+        totalUnprocessedAll: 1000.0,
+        addedAll: 500.0,
+        depositComplaintAll: 300.0,
+        takenAll: 200.0,
       );
-      expect(expected, equals(52500.0)); // 10,000 + 40,000 + 2,500
+      // 10,000 + 40,000 + 30,000 + 25,000 + 2,500 + 1,000 + 500 - 300 - 200 = 108,500
+      expect(expected, equals(108500.0));
 
-      const endReddy = 12000.0;
-      const endBalance = 38000.0;
-      const transferToNext = 3000.0;
-
+      // Actual: EndReddy(S3) + EndBalance(S1+S2+S3) + TransferToNext(S3)
       final actual = AppUtils.actualAmount(
-        endReddy: endReddy,
-        endBalance: endBalance,
-        transferToNext: transferToNext,
+        endReddyS3: 12000.0,
+        endBalanceS1: 20000.0,
+        endBalanceS2: 30000.0,
+        endBalanceS3: 25000.0,
+        transferToNextS3: 3000.0,
       );
-      expect(actual, equals(53000.0)); // 12,000 + 38,000 + 3,000
+      // 12,000 + 20,000 + 30,000 + 25,000 + 3,000 = 90,000
+      expect(actual, equals(90000.0));
 
       final deviation = AppUtils.shiftDeviation(
         actualAmount: actual,
         expectedAmount: expected,
       );
-      expect(deviation, equals(500.0)); // 53,000 - 52,500
-      expect(AppUtils.deviationTag(deviation), equals('positive'));
-      expect(AppUtils.formatDeviation(deviation), equals('+500.00'));
+      expect(deviation, equals(-18500.0)); // 90,000 - 108,500
+      expect(AppUtils.deviationTag(deviation), equals('negative'));
     });
 
     test('Calculates 24-hour Daily Deviation across 3 shifts', () {

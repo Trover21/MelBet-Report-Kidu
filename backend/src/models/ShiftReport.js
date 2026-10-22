@@ -13,8 +13,12 @@ const shiftReportSchema = new mongoose.Schema(
   {
     employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     employeeName: { type: String, required: true },
+    teamNumber: { type: Number, default: 1, min: 1 }, // team the employee belongs to
+    teamName: { type: String, default: 'Team 1', trim: true },
     operatingDate: { type: Date, required: true },
     shiftNumber: { type: Number, enum: [1, 2, 3], required: true },
+    shiftStartTime: { type: String, default: '' }, // e.g. "06:00" – employee-defined
+    shiftEndTime:   { type: String, default: '' }, // e.g. "14:00" – employee-defined
 
     // Input fields
     initialReddy: { type: Number, default: 0 },
@@ -69,7 +73,11 @@ shiftReportSchema.methods.toClientObject = function () {
     ...obj,
     id: obj._id.toString(),
     employeeId: obj.employeeId.toString(),
+    teamName: obj.teamName || (obj.teamNumber ? `Team ${obj.teamNumber}` : 'Team 1'),
+    teamNumber: obj.teamNumber ?? 1,
     operatingDate: obj.operatingDate.toISOString(),
+    shiftStartTime: obj.shiftStartTime ?? '',
+    shiftEndTime: obj.shiftEndTime ?? '',
     submittedAt: obj.submittedAt.toISOString(),
     lastModifiedAt: obj.lastModifiedAt?.toISOString() ?? null,
     correctionHistory: obj.correctionHistory.map((c) => ({

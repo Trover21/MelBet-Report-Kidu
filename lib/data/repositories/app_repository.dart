@@ -1,5 +1,6 @@
 import '../models/user_model.dart';
 import '../models/shift_report_model.dart';
+import '../models/team_request_model.dart';
 
 /// Result object returned from login attempts
 class LoginResult {
@@ -43,8 +44,29 @@ abstract class AppRepository {
     required String email,
     required String name,
     required String role, // 'employee' | 'manager'
+    int teamNumber = 1,
+    String? teamName,
+    List<String>? teams,
   });
   Future<String?> sendCredentialsByEmail(String email);
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
+
+  // ── Teams & Requests ──────────────────────────────────────────
+  Future<List<String>> getTeams();
+  Future<String?> addTeam(String name, {String? description});
+  Future<String?> removeTeam(String name);
+  Future<String?> removeManagerTeam(String teamName);
+  Future<String?> requestTeams({
+    required List<String> requestedTeams,
+    String? reason,
+  });
+  Future<List<TeamRequest>> getTeamRequests();
+  Future<String?> approveTeamRequest(String requestId);
+  Future<String?> rejectTeamRequest(String requestId);
+  Future<String?> cancelTeamRequest(String requestId);
 
   // ── Users ─────────────────────────────────────────────────────
   Future<List<AppUser>> getAllUsers();
@@ -52,13 +74,14 @@ abstract class AppRepository {
   Future<void> approveUser(String userId);
   Future<void> rejectUser(String userId);
   Future<void> setUserActive(String userId, bool isActive);
+  Future<String?> deleteUser(String userId);
   Future<List<AppUser>> getEmployees();
 
   // ── Reports ───────────────────────────────────────────────────
   Future<List<ShiftReport>> getAllReports();
   Future<List<ShiftReport>> getReportsByEmployee(String employeeId);
   Future<List<ShiftReport>> getReportsByDateRange(DateTime start, DateTime end,
-      {String? employeeId, int? shiftNumber});
+      {String? employeeId, int? shiftNumber, String? teamName});
   Future<bool> isDuplicateReport(String employeeId, DateTime date, int shiftNumber,
       {String? excludeReportId});
   Future<ShiftReport> submitReport(ShiftReport report);
@@ -68,3 +91,4 @@ abstract class AppRepository {
       {String? notes});
   Future<void> deleteReport(String reportId);
 }
+

@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const authRoutes = require('./src/routes/auth');
 const userRoutes = require('./src/routes/users');
 const reportRoutes = require('./src/routes/reports');
+const teamRoutes = require('./src/routes/teams');
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/teams', teamRoutes);
 
 // ── Health check ─────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

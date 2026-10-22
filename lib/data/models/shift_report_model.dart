@@ -45,10 +45,14 @@ class ShiftReport {
   final String id;
   final String employeeId;
   final String employeeName;
+  final int teamNumber; // legacy compatibility
+  final String teamName; // team the employee belongs to (e.g. "Team 1" or custom name)
 
   // Operating date & shift
   final DateTime operatingDate;
   final int shiftNumber; // 1, 2, or 3
+  final String shiftStartTime; // e.g. "06:00" — entered by employee
+  final String shiftEndTime;   // e.g. "14:00" — entered by employee
 
   // === Input Fields ===
   final double initialReddy;
@@ -88,8 +92,12 @@ class ShiftReport {
     required this.id,
     required this.employeeId,
     required this.employeeName,
+    this.teamNumber = 1,
+    this.teamName = 'Team 1',
     required this.operatingDate,
     required this.shiftNumber,
+    this.shiftStartTime = '',
+    this.shiftEndTime = '',
     required this.initialReddy,
     required this.initialAccount,
     required this.totalDeposit,
@@ -120,14 +128,24 @@ class ShiftReport {
     this.correctionHistory = const [],
   });
 
-  String get shiftLabel => 'Shift $shiftNumber';
+  String get shiftLabel {
+    if (shiftStartTime.isNotEmpty && shiftEndTime.isNotEmpty) {
+      return 'Shift $shiftNumber ($shiftStartTime – $shiftEndTime)';
+    }
+    return 'Shift $shiftNumber';
+  }
 
   factory ShiftReport.fromJson(Map<String, dynamic> json) => ShiftReport(
         id: json['id'] as String,
         employeeId: json['employeeId'] as String,
         employeeName: json['employeeName'] as String,
+        teamNumber: (json['teamNumber'] as num?)?.toInt() ?? 1,
+        teamName: json['teamName'] as String? ??
+            'Team ${(json['teamNumber'] as num?)?.toInt() ?? 1}',
         operatingDate: DateTime.parse(json['operatingDate'] as String),
         shiftNumber: json['shiftNumber'] as int,
+        shiftStartTime: json['shiftStartTime'] as String? ?? '',
+        shiftEndTime: json['shiftEndTime'] as String? ?? '',
         initialReddy: (json['initialReddy'] as num).toDouble(),
         initialAccount: (json['initialAccount'] as num).toDouble(),
         totalDeposit: (json['totalDeposit'] as num).toDouble(),
@@ -166,8 +184,12 @@ class ShiftReport {
         'id': id,
         'employeeId': employeeId,
         'employeeName': employeeName,
+        'teamNumber': teamNumber,
+        'teamName': teamName,
         'operatingDate': operatingDate.toIso8601String(),
         'shiftNumber': shiftNumber,
+        'shiftStartTime': shiftStartTime,
+        'shiftEndTime': shiftEndTime,
         'initialReddy': initialReddy,
         'initialAccount': initialAccount,
         'totalDeposit': totalDeposit,
@@ -202,8 +224,12 @@ class ShiftReport {
     String? id,
     String? employeeId,
     String? employeeName,
+    int? teamNumber,
+    String? teamName,
     DateTime? operatingDate,
     int? shiftNumber,
+    String? shiftStartTime,
+    String? shiftEndTime,
     double? initialReddy,
     double? initialAccount,
     double? totalDeposit,
@@ -237,8 +263,12 @@ class ShiftReport {
         id: id ?? this.id,
         employeeId: employeeId ?? this.employeeId,
         employeeName: employeeName ?? this.employeeName,
+        teamNumber: teamNumber ?? this.teamNumber,
+        teamName: teamName ?? this.teamName,
         operatingDate: operatingDate ?? this.operatingDate,
         shiftNumber: shiftNumber ?? this.shiftNumber,
+        shiftStartTime: shiftStartTime ?? this.shiftStartTime,
+        shiftEndTime: shiftEndTime ?? this.shiftEndTime,
         initialReddy: initialReddy ?? this.initialReddy,
         initialAccount: initialAccount ?? this.initialAccount,
         totalDeposit: totalDeposit ?? this.totalDeposit,

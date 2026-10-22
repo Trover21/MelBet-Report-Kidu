@@ -304,31 +304,62 @@ class _SignInFormState extends State<_SignInForm> {
             ),
             const SizedBox(height: 20),
 
-            // Demo hints
+            // About Developer
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppTheme.bgSurface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.bgBorder),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.primary.withOpacity(0.35)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Demo Accounts:',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: AppTheme.accent),
+                  Row(
+                    children: [
+                      const Icon(Icons.code_rounded,
+                          color: AppTheme.accent, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'About developer',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.person_rounded,
+                          color: AppTheme.textSecondary, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        'name: kidoo Trove',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
-                  Text('Admin: admin / admin123',
-                      style: Theme.of(context).textTheme.bodySmall),
-                  Text('Manager: manager / mgr123',
-                      style: Theme.of(context).textTheme.bodySmall),
-                  Text('Employee: alem / emp123',
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Row(
+                    children: [
+                      const Icon(Icons.phone_rounded,
+                          color: AppTheme.success, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        'phone +251900413372',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -364,6 +395,32 @@ class _SignUpFormState extends State<_SignUpForm> {
   bool _obscureConfirm = true;
   bool _isSubmitting = false;
 
+  List<String> _availableTeams = ['Team 1', 'Team 2', 'Team 3'];
+  String _selectedTeam = 'Team 1';
+  final Set<String> _selectedManagerTeams = {'Team 1'};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final auth = context.read<AuthProvider>();
+      await auth.loadTeams();
+      if (mounted && auth.teams.isNotEmpty) {
+        setState(() {
+          _availableTeams = List.from(auth.teams);
+          if (!_availableTeams.contains(_selectedTeam)) {
+            _selectedTeam = _availableTeams.first;
+          }
+          if (_selectedManagerTeams.isEmpty ||
+              !_selectedManagerTeams.any((t) => _availableTeams.contains(t))) {
+            _selectedManagerTeams.clear();
+            _selectedManagerTeams.add(_availableTeams.first);
+          }
+        });
+      }
+    });
+  }
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -376,15 +433,34 @@ class _SignUpFormState extends State<_SignUpForm> {
 
   Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedRole == 'manager' && _selectedManagerTeams.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select at least one team to manage'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     final auth = context.read<AuthProvider>();
+    final chosenTeam = _selectedRole == 'manager'
+        ? _selectedManagerTeams.first
+        : _selectedTeam;
+    final chosenTeams = _selectedRole == 'manager'
+        ? _selectedManagerTeams.toList()
+        : [_selectedTeam];
+
     final error = await auth.register(
       name: _nameCtrl.text.trim(),
       username: _usernameCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
       password: _passwordCtrl.text,
       role: _selectedRole,
+      teamName: chosenTeam,
+      teams: chosenTeams,
     );
 
     if (!mounted) return;
@@ -408,7 +484,14 @@ class _SignUpFormState extends State<_SignUpForm> {
       _emailCtrl.clear();
       _passwordCtrl.clear();
       _confirmPasswordCtrl.clear();
-      setState(() => _selectedRole = 'employee');
+      setState(() {
+        _selectedRole = 'employee';
+        _selectedTeam = _availableTeams.isNotEmpty ? _availableTeams.first : 'Team 1';
+        _selectedManagerTeams.clear();
+        if (_availableTeams.isNotEmpty) {
+          _selectedManagerTeams.add(_availableTeams.first);
+        }
+      });
       widget.onSwitchToSignIn();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -527,6 +610,124 @@ class _SignUpFormState extends State<_SignUpForm> {
                 return null;
               },
             ),
+            const SizedBox(height: 12),
+
+            // Team Selection (Dynamic: single for employee, multi-select for manager)
+            if (_selectedRole == 'employee') ...[
+              DropdownButtonFormField<String>(
+                value: _availableTeams.contains(_selectedTeam)
+                    ? _selectedTeam
+                    : (_availableTeams.isNotEmpty ? _availableTeams.first : null),
+                decoration: const InputDecoration(
+                  labelText: 'Select Team',
+                  prefixIcon: Icon(Icons.groups_outlined),
+                  helperText: 'Your assigned shift team',
+                ),
+                dropdownColor: AppTheme.bgCard,
+                items: _availableTeams
+                    .map((t) => DropdownMenuItem(
+                          value: t,
+                          child: Text(t),
+                        ))
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedTeam = val);
+                },
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Please select a team' : null,
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgCard,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _selectedManagerTeams.isEmpty
+                        ? AppTheme.error
+                        : AppTheme.bgBorder,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.groups_outlined,
+                            size: 18, color: AppTheme.accent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Select Teams to Manage (Multi-select):',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _availableTeams.map((team) {
+                        final isSelected = _selectedManagerTeams.contains(team);
+                        return FilterChip(
+                          avatar: Icon(
+                            isSelected
+                                ? Icons.check_circle_rounded
+                                : Icons.radio_button_unchecked,
+                            size: 16,
+                            color: isSelected ? Colors.white : AppTheme.textSecondary,
+                          ),
+                          label: Text(team),
+                          selected: isSelected,
+                          selectedColor: AppTheme.primary,
+                          checkmarkColor: Colors.white,
+                          showCheckmark: false,
+                          labelStyle: TextStyle(
+                            color: isSelected ? Colors.white : AppTheme.textPrimary,
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                          backgroundColor: AppTheme.bgSurface,
+                          side: BorderSide(
+                            color: isSelected ? AppTheme.primary : AppTheme.bgBorder,
+                          ),
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                _selectedManagerTeams.add(team);
+                              } else {
+                                if (_selectedManagerTeams.length > 1) {
+                                  _selectedManagerTeams.remove(team);
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Manager must select at least one team'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Selected: ${_selectedManagerTeams.join(", ")}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppTheme.accent,
+                            fontSize: 11,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
 
             // Email

@@ -74,6 +74,12 @@ final GoRouter appRouter = GoRouter(
               ReportDetailAdminScreen(reportId: state.pathParameters['id']!),
         ),
         GoRoute(
+          path: 'report/:id/edit',
+          name: 'admin-report-edit',
+          builder: (ctx, state) =>
+              ShiftReportFormScreen(reportId: state.pathParameters['id']),
+        ),
+        GoRoute(
           path: 'date-interval',
           name: 'date-interval',
           builder: (ctx, state) => const DateIntervalScreen(),

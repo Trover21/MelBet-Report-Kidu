@@ -46,7 +46,7 @@ router.post('/login', async (req, res) => {
 // role must be 'employee' or 'manager' (admin cannot self-register)
 router.post('/register', async (req, res) => {
   try {
-    const { name, username, email, password, role } = req.body;
+    const { name, username, email, password, role, teamNumber, teamName, teams } = req.body;
 
     if (!name || !username || !password) {
       return res.status(400).json({ error: 'Name, username, and password are required' });
@@ -54,6 +54,38 @@ router.post('/register', async (req, res) => {
 
     const allowedRoles = ['employee', 'manager'];
     const assignedRole = allowedRoles.includes(role) ? role : 'employee';
+
+    // Parse team(s)
+    let assignedTeamName = 'Team 1';
+    let assignedTeams = [];
+
+    if (assignedRole === 'manager') {
+      if (Array.isArray(teams) && teams.length > 0) {
+        assignedTeams = teams.map((t) => String(t).trim()).filter(Boolean);
+        assignedTeamName = assignedTeams[0] || 'Team 1';
+      } else if (teamName && String(teamName).trim()) {
+        assignedTeamName = String(teamName).trim();
+        assignedTeams = [assignedTeamName];
+      } else {
+        assignedTeams = ['Team 1'];
+      }
+    } else {
+      // employee: selects one team
+      if (teamName && String(teamName).trim()) {
+        assignedTeamName = String(teamName).trim();
+      } else if (Array.isArray(teams) && teams.length > 0) {
+        assignedTeamName = String(teams[0]).trim();
+      } else if (teamNumber) {
+        assignedTeamName = `Team ${teamNumber}`;
+      }
+      assignedTeams = [assignedTeamName];
+    }
+
+    // Optional legacy teamNumber fallback
+    const matchedNumber = parseInt(assignedTeamName.replace(/\D/g, ''), 10);
+    const assignedTeamNumber = !isNaN(matchedNumber) && matchedNumber >= 1
+      ? matchedNumber
+      : (Number.isInteger(Number(teamNumber)) && Number(teamNumber) >= 1 ? Number(teamNumber) : 1);
 
     const existingByUsername = await User.findOne({ username: username.toLowerCase().trim() });
     if (existingByUsername) {
@@ -73,6 +105,9 @@ router.post('/register', async (req, res) => {
       passwordHash: password, // pre-save hook will hash it
       role: assignedRole,
       email: email?.toLowerCase().trim(),
+      teamNumber: assignedTeamNumber,
+      teamName: assignedTeamName,
+      teams: assignedTeams,
       isApproved: false,
       isActive: true,
     });
@@ -82,6 +117,34 @@ router.post('/register', async (req, res) => {
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed. Please try again.' });
+  }
+});
+
+// ── POST /api/auth/change-password ───────────────────────────────
+router.post('/change-password', authenticate, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    user.passwordHash = newPassword;
+    await user.save();
+    return res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    console.error('Change password error:', err);
+    res.status(500).json({ error: 'Failed to change password. Please try again.' });
   }
 });
 

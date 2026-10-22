@@ -225,23 +225,23 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
 
   Widget _buildStatsRow(BuildContext context, List<ShiftReport> reports) {
     final total = reports.length;
-    final totalDev = reports.fold(0.0, (s, r) => s + r.deviation);
-    final totalComm = reports.fold(0.0, (s, r) => s + r.totalCommission);
+    final totalDep = reports.fold(0.0, (s, r) => s + r.totalDeposit);
+    final totalWd = reports.fold(0.0, (s, r) => s + r.totalWithdrawal);
 
     return Row(
       children: [
         _statCard(context, 'Total Reports', '$total', Icons.description_outlined),
         const SizedBox(width: 12),
-        _statCard(context, 'Total Commission',
-            AppUtils.formatCurrency(totalComm), Icons.percent_rounded,
+        _statCard(context, 'Total Deposits',
+            AppUtils.formatCurrency(totalDep), Icons.arrow_downward_rounded,
             color: AppTheme.success),
         const SizedBox(width: 12),
         _statCard(
           context,
-          'Net Deviation',
-          AppUtils.formatDeviation(totalDev),
-          Icons.trending_up_rounded,
-          color: totalDev >= 0 ? AppTheme.deviationPositive : AppTheme.deviationNegative,
+          'Total Withdrawals',
+          AppUtils.formatCurrency(totalWd),
+          Icons.arrow_upward_rounded,
+          color: AppTheme.accent,
         ),
       ],
     );
@@ -278,12 +278,6 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
   }
 
   Widget _buildReportCard(BuildContext context, ShiftReport report, int index) {
-    final devColor = report.deviation > 0
-        ? AppTheme.deviationPositive
-        : report.deviation < 0
-            ? AppTheme.deviationNegative
-            : AppTheme.deviationZero;
-
     return GestureDetector(
       onTap: () => context.push('/employee/report/${report.id}'),
       child: Container(
@@ -331,12 +325,9 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
                       AppUtils.formatCurrency(report.totalDeposit)),
                   _infoItem(context, 'Withdrawal',
                       AppUtils.formatCurrency(report.totalWithdrawal)),
-                  _infoItem(context, 'Commission',
-                      AppUtils.formatCurrency(report.totalCommission),
-                      color: AppTheme.success),
-                  _infoItem(context, 'Deviation',
-                      AppUtils.formatDeviation(report.deviation),
-                      color: devColor),
+                  _infoItem(context, 'End Balance',
+                      AppUtils.formatCurrency(report.endBalance),
+                      color: AppTheme.accent),
                 ],
               ),
               if (report.status == ReportStatus.correctionRequested) ...[

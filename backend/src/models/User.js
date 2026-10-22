@@ -20,6 +20,9 @@ const userSchema = new mongoose.Schema(
       default: 'employee',
     },
     email: { type: String, trim: true, lowercase: true },
+    teamNumber: { type: Number, default: 1, min: 1 }, // which team this user belongs to
+    teamName: { type: String, default: 'Team 1', trim: true },
+    teams: [{ type: String, trim: true }],
     isApproved: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
   },
@@ -38,12 +41,22 @@ userSchema.methods.comparePassword = function (plain) {
 };
 
 userSchema.methods.toSafeObject = function () {
+  const primaryTeam =
+    this.teamName ||
+    (this.teams && this.teams[0]) ||
+    (this.teamNumber ? `Team ${this.teamNumber}` : 'Team 1');
+  const userTeams =
+    this.teams && this.teams.length > 0 ? this.teams : [primaryTeam];
+
   return {
     id: this._id.toString(),
     name: this.name,
     username: this.username,
     role: this.role,
     email: this.email,
+    teamNumber: this.teamNumber ?? 1,
+    teamName: primaryTeam,
+    teams: userTeams,
     isApproved: this.isApproved,
     isActive: this.isActive,
     createdAt: this.createdAt,

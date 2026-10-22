@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -38,6 +39,11 @@ class ReportDetailAdminScreen extends StatelessWidget {
         title: Text('${report.shiftLabel} — ${AppUtils.formatDate(report.operatingDate)}'),
         leading: BackButton(onPressed: () => context.pop()),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_note_rounded, color: AppTheme.accent),
+            tooltip: 'Edit Report',
+            onPressed: () => context.push('/admin/report/${report.id}/edit'),
+          ),
           StatusBadge(status: report.status),
           const SizedBox(width: 12),
         ],
@@ -136,14 +142,48 @@ class ReportDetailAdminScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(r.employeeName,
-                  style: Theme.of(context).textTheme.titleSmall),
-              Text('Submitted: ${AppUtils.formatDateTime(r.submittedAt)}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(r.employeeName,
+                        style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border:
+                            Border.all(color: AppTheme.primary.withOpacity(0.4)),
+                      ),
+                      child: Text(
+                        r.teamName,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (r.shiftStartTime.isNotEmpty && r.shiftEndTime.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text('Shift Time: ${r.shiftStartTime} – ${r.shiftEndTime}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          )),
+                ],
+                const SizedBox(height: 2),
+                Text('Submitted: ${AppUtils.formatDateTime(r.submittedAt)}',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ),
         ],
       ),
@@ -370,6 +410,35 @@ class ReportDetailAdminScreen extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
+              // ── Copy Report (WhatsApp Format) ───────────────────
+              ElevatedButton.icon(
+                onPressed: () {
+                  final text = _generateWhatsAppReport(report);
+                  Clipboard.setData(ClipboardData(text: text));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text('Report copied! Ready to paste into WhatsApp.'),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: Color(0xFF22C55E),
+                      behavior: SnackBarBehavior.floating,
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('Copy Report'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
               if (report.status != ReportStatus.approved)
                 ElevatedButton.icon(
                   onPressed: () async {
@@ -471,6 +540,20 @@ class ReportDetailAdminScreen extends StatelessWidget {
                     foregroundColor: AppTheme.warning,
                     side: const BorderSide(color: AppTheme.warning)),
               ),
+              // ── Edit Report Button (Manager / Admin) ───────────
+              ElevatedButton.icon(
+                onPressed: () => context.push('/admin/report/${report.id}/edit'),
+                icon: const Icon(Icons.edit_note_rounded, size: 18),
+                label: const Text('Edit Report'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accent,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
               // ── Remove Report Button ───────────────────────────
               OutlinedButton.icon(
                 onPressed: () async {
@@ -521,6 +604,42 @@ class ReportDetailAdminScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _generateWhatsAppReport(ShiftReport report) {
+    final endAcc = report.endBalance + report.transferToNext;
+    final exp = report.initialReddy + report.initialAccount + report.totalCommission;
+    final act = report.endReddy + endAcc;
+    final dev = act - exp;
+    final devStr = dev >= 0 ? '+${AppUtils.formatCurrency(dev)}' : AppUtils.formatCurrency(dev);
+
+    final buffer = StringBuffer();
+    buffer.writeln('📋 *MELBET SHIFT REPORT*');
+    buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    buffer.writeln('📅 *Date:*       ${AppUtils.formatDate(report.operatingDate)}');
+    buffer.writeln('🔖 *Shift:*      ${report.shiftLabel}');
+    buffer.writeln('👤 *Employee:*   ${report.employeeName}');
+    buffer.writeln('👥 *Team:*       ${report.teamName}');
+    buffer.writeln('────────────────────────────────');
+    buffer.writeln('💵 Initial Ready:   ${AppUtils.formatCurrency(report.initialReddy)}');
+    buffer.writeln('💳 Initial Account: ${AppUtils.formatCurrency(report.initialAccount)}');
+    buffer.writeln('📥 Deposit:         ${AppUtils.formatCurrency(report.totalDeposit)}');
+    buffer.writeln('📤 Withdrawal:      ${AppUtils.formatCurrency(report.totalWithdrawal)}');
+    buffer.writeln('📥 Deposit Commi:   ${AppUtils.formatCurrency(report.depositCommission)}');
+    buffer.writeln('📤 With Commi:      ${AppUtils.formatCurrency(report.withdrawalCommission)}');
+    buffer.writeln('💰 Total Commi:     ${AppUtils.formatCurrency(report.totalCommission)}');
+    buffer.writeln('🏁 End Ready:       ${AppUtils.formatCurrency(report.endReddy)}');
+    buffer.writeln('🏦 End Account:     ${AppUtils.formatCurrency(endAcc)}');
+    buffer.writeln('────────────────────────────────');
+    buffer.writeln('🎯 *Expected:*      ${AppUtils.formatCurrency(exp)}');
+    buffer.writeln('📊 *Actual:*        ${AppUtils.formatCurrency(act)}');
+    buffer.writeln('⚖️ *Deviation:*     $devStr');
+    buffer.writeln('📌 *Status:*        ${report.status.label.toUpperCase()}');
+    if (report.notes != null && report.notes!.trim().isNotEmpty) {
+      buffer.writeln('📝 *Notes:*         ${report.notes}');
+    }
+    buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    return buffer.toString();
   }
 }
 

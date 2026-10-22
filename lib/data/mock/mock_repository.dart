@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/user_model.dart';
 import '../models/shift_report_model.dart';
+import '../models/team_request_model.dart';
 import '../repositories/app_repository.dart';
 import '../../core/utils/app_utils.dart';
 
@@ -119,6 +120,9 @@ class MockRepository implements AppRepository {
     required String email,
     required String name,
     required String role,
+    int teamNumber = 1,
+    String? teamName,
+    List<String>? teams,
   }) async {
     await Future.delayed(const Duration(milliseconds: 700));
 
@@ -133,6 +137,28 @@ class MockRepository implements AppRepository {
     // Only allow employee or manager self-registration
     final assignedRole = role == 'manager' ? UserRole.manager : UserRole.employee;
 
+    String primaryTeam = 'Team 1';
+    List<String> userTeams = ['Team 1'];
+
+    if (assignedRole == UserRole.manager) {
+      if (teams != null && teams.isNotEmpty) {
+        userTeams = List.from(teams);
+        primaryTeam = userTeams.first;
+      } else if (teamName != null && teamName.isNotEmpty) {
+        primaryTeam = teamName;
+        userTeams = [primaryTeam];
+      }
+    } else {
+      if (teamName != null && teamName.isNotEmpty) {
+        primaryTeam = teamName;
+      } else if (teams != null && teams.isNotEmpty) {
+        primaryTeam = teams.first;
+      } else {
+        primaryTeam = 'Team $teamNumber';
+      }
+      userTeams = [primaryTeam];
+    }
+
     final newUser = AppUser(
       id: _uuid.v4(),
       name: name,
@@ -140,12 +166,160 @@ class MockRepository implements AppRepository {
       passwordHash: password,
       role: assignedRole,
       email: email,
+      teamNumber: teamNumber,
+      teamName: primaryTeam,
+      teams: userTeams,
       isApproved: false, // Requires admin approval
       isActive: true,
     );
     _users.add(newUser);
     await _saveUsers();
     return null; // success
+  }
+
+  // ── Password Change ─────────────────────────────────────────────
+  @override
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    final prefs = await SharedPreferences.getInstance();
+    final curId = prefs.getString('current_user_id');
+    final user = _users.firstWhereOrNull((u) => u.id == curId);
+    if (user == null) return 'User not found';
+    if (user.passwordHash != currentPassword) return 'Current password is incorrect';
+    if (newPassword.length < 6) return 'Password must be at least 6 characters';
+
+    final idx = _users.indexWhere((u) => u.id == curId);
+    _users[idx] = user.copyWith(passwordHash: newPassword);
+    await _saveUsers();
+    return null;
+  }
+
+  // ── Teams & Requests ──────────────────────────────────────────
+  final List<String> _dynamicTeams = ['Team 1', 'Team 2', 'Team 3'];
+  final List<TeamRequest> _mockTeamRequests = [];
+
+  @override
+  Future<List<String>> getTeams() async {
+    return List.from(_dynamicTeams);
+  }
+
+  @override
+  Future<String?> addTeam(String name, {String? description}) async {
+    final clean = name.trim();
+    if (clean.isEmpty) return 'Team name is required';
+    if (_dynamicTeams.contains(clean)) return 'Team already exists';
+    _dynamicTeams.add(clean);
+    return null;
+  }
+
+  @override
+  Future<String?> removeTeam(String name) async {
+    _dynamicTeams.remove(name);
+    return null;
+  }
+
+  @override
+  Future<String?> removeManagerTeam(String teamName) async {
+    if (_currentUser == null) return 'Not authenticated';
+    final curTeams = List<String>.from(_currentUser!.teams);
+    if (curTeams.length <= 1) {
+      return 'You must manage at least one team';
+    }
+    curTeams.remove(teamName);
+    final newPrimary = _currentUser!.teamName == teamName
+        ? (curTeams.isNotEmpty ? curTeams.first : 'Team 1')
+        : _currentUser!.teamName;
+    _currentUser = _currentUser!.copyWith(teams: curTeams, teamName: newPrimary);
+
+    final idx = _users.indexWhere((u) => u.id == _currentUser!.id);
+    if (idx >= 0) {
+      _users[idx] = _currentUser!;
+      await _saveUsers();
+    }
+    return null;
+  }
+
+  @override
+  Future<String?> requestTeams({
+    required List<String> requestedTeams,
+    String? reason,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final curId = prefs.getString('current_user_id') ?? 'mgr-001';
+    final user = _users.firstWhereOrNull((u) => u.id == curId);
+
+    _mockTeamRequests.add(
+      TeamRequest(
+        id: _uuid.v4(),
+        userId: user?.id ?? curId,
+        userName: user?.name ?? 'Manager',
+        requestedTeams: requestedTeams,
+        reason: reason ?? '',
+        createdAt: DateTime.now(),
+      ),
+    );
+    return null;
+  }
+
+  @override
+  Future<List<TeamRequest>> getTeamRequests() async {
+    return List.from(_mockTeamRequests);
+  }
+
+  @override
+  Future<String?> approveTeamRequest(String requestId) async {
+    final idx = _mockTeamRequests.indexWhere((r) => r.id == requestId);
+    if (idx < 0) return 'Request not found';
+    final req = _mockTeamRequests[idx];
+    _mockTeamRequests[idx] = TeamRequest(
+      id: req.id,
+      userId: req.userId,
+      userName: req.userName,
+      requestedTeams: req.requestedTeams,
+      reason: req.reason,
+      status: 'approved',
+      reviewedBy: 'Admin',
+      reviewedAt: DateTime.now(),
+      createdAt: req.createdAt,
+    );
+
+    // Add teams to manager's user
+    final uIdx = _users.indexWhere((u) => u.id == req.userId);
+    if (uIdx >= 0) {
+      final curTeams = Set<String>.from(_users[uIdx].teams);
+      curTeams.addAll(req.requestedTeams);
+      _users[uIdx] = _users[uIdx].copyWith(teams: curTeams.toList());
+      await _saveUsers();
+    }
+    return null;
+  }
+
+  @override
+  Future<String?> rejectTeamRequest(String requestId) async {
+    final idx = _mockTeamRequests.indexWhere((r) => r.id == requestId);
+    if (idx < 0) return 'Request not found';
+    final req = _mockTeamRequests[idx];
+    _mockTeamRequests[idx] = TeamRequest(
+      id: req.id,
+      userId: req.userId,
+      userName: req.userName,
+      requestedTeams: req.requestedTeams,
+      reason: req.reason,
+      status: 'rejected',
+      reviewedBy: 'Admin',
+      reviewedAt: DateTime.now(),
+      createdAt: req.createdAt,
+    );
+    return null;
+  }
+
+  @override
+  Future<String?> cancelTeamRequest(String requestId) async {
+    _mockTeamRequests.removeWhere((r) => r.id == requestId);
+    return null;
   }
 
   // ── Forgot Password ────────────────────────────────────────────
@@ -198,6 +372,19 @@ class MockRepository implements AppRepository {
     await _saveUsers();
   }
 
+  @override
+  Future<String?> deleteUser(String userId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final idx = _users.indexWhere((u) => u.id == userId);
+    if (idx < 0) return 'User not found';
+    if (_users[idx].role == UserRole.admin) {
+      return 'Cannot delete an administrator account';
+    }
+    _users.removeAt(idx);
+    await _saveUsers();
+    return null;
+  }
+
   // ── Reports CRUD ───────────────────────────────────────────────
   @override
   Future<List<ShiftReport>> getAllReports() async {
@@ -214,7 +401,7 @@ class MockRepository implements AppRepository {
   @override
   Future<List<ShiftReport>> getReportsByDateRange(
       DateTime start, DateTime end,
-      {String? employeeId, int? shiftNumber}) async {
+      {String? employeeId, int? shiftNumber, String? teamName}) async {
     await Future.delayed(const Duration(milliseconds: 400));
     return _reports.where((r) {
       final inRange = !r.operatingDate.isBefore(
@@ -223,7 +410,10 @@ class MockRepository implements AppRepository {
               .isAfter(DateTime(end.year, end.month, end.day, 23, 59, 59));
       final empMatch = employeeId == null || r.employeeId == employeeId;
       final shiftMatch = shiftNumber == null || r.shiftNumber == shiftNumber;
-      return inRange && empMatch && shiftMatch;
+      final teamMatch = teamName == null ||
+          r.teamName.toLowerCase() == teamName.toLowerCase() ||
+          'Team ${r.teamNumber}'.toLowerCase() == teamName.toLowerCase();
+      return inRange && empMatch && shiftMatch && teamMatch;
     }).toList();
   }
 
@@ -366,7 +556,6 @@ class MockRepository implements AppRepository {
         final wdCompl = rnd.nextDouble() * 200;
 
         final eb = AppUtils.endBalance(
-          initialReddy: initialReddy,
           initialAccount: initialAccount,
           totalDeposit: totalDeposit,
           totalWithdrawal: totalWithdrawal,
@@ -380,18 +569,6 @@ class MockRepository implements AppRepository {
         final depComm = AppUtils.depositCommission(totalDeposit);
         final wdComm = AppUtils.withdrawalCommission(totalWithdrawal);
         final totComm = AppUtils.totalCommission(depComm, wdComm);
-        final expected = AppUtils.expectedAmount(
-          initialReddy: initialReddy,
-          initialAccount: initialAccount,
-          totalCommission: totComm,
-        );
-        final actual = AppUtils.actualAmount(
-          endReddy: endReddy,
-          endBalance: eb,
-          transferToNext: transferToNext,
-        );
-        final dev = AppUtils.shiftDeviation(
-            actualAmount: actual, expectedAmount: expected);
 
         reports.add(ShiftReport(
           id: _uuid.v4(),
@@ -414,9 +591,9 @@ class MockRepository implements AppRepository {
           depositCommission: depComm,
           withdrawalCommission: wdComm,
           totalCommission: totComm,
-          expectedAmount: expected,
-          actualAmount: actual,
-          deviation: dev,
+          expectedAmount: 0,
+          actualAmount: 0,
+          deviation: 0,
           submittedAt: date.add(Duration(hours: shift * 8)),
           status: day > 2 ? ReportStatus.approved : ReportStatus.submitted,
         ));

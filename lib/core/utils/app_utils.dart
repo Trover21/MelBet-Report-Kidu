@@ -56,8 +56,9 @@ class AppUtils {
       depComm + wdComm;
 
   /// Calculate End Balance
+  /// Formula: (Initial Account + Total Deposit + Total Unprocessed + Added)
+  ///         − (Transfer To Next + Deposit Complaint Accepted + Withdrawal Complaint Accepted + Total Withdrawal + Taken)
   static double endBalance({
-    required double initialReddy,
     required double initialAccount,
     required double totalDeposit,
     required double totalWithdrawal,
@@ -68,28 +69,55 @@ class AppUtils {
     required double withdrawalComplaintAccepted,
     required double taken,
   }) {
-    final initialBalance = initialReddy + initialAccount;
-    return (initialBalance + totalDeposit + totalUnprocessed + added) -
-        (transferToNext + depositComplaintAccepted + withdrawalComplaintAccepted + taken);
+    return (initialAccount + totalDeposit + totalUnprocessed + added) -
+        (transferToNext +
+            depositComplaintAccepted +
+            withdrawalComplaintAccepted +
+            totalWithdrawal +
+            taken);
   }
 
-  /// Calculate Expected Amount
+  /// Calculate Daily Expected Amount (across all 3 shifts)
+  /// Formula: Initial Reddy (S1) + Initial Account (S1)
+  ///          + End Balance (S2) + End Balance (S3)
+  ///          + Total Commission (all shifts)
+  ///          + Total Unprocessed (all shifts)
+  ///          + Added (all shifts)
+  ///          − Deposit Complaint Accepted (all shifts)
+  ///          − Taken (all shifts)
   static double expectedAmount({
-    required double initialReddy,
-    required double initialAccount,
-    required double totalCommission,
+    required double initialReddyS1,
+    required double initialAccountS1,
+    required double endBalanceS2,
+    required double endBalanceS3,
+    required double totalCommissionAll,
+    required double totalUnprocessedAll,
+    required double addedAll,
+    required double depositComplaintAll,
+    required double takenAll,
   }) =>
-      initialReddy + initialAccount + totalCommission;
+      initialReddyS1 +
+      initialAccountS1 +
+      endBalanceS2 +
+      endBalanceS3 +
+      totalCommissionAll +
+      totalUnprocessedAll +
+      addedAll -
+      depositComplaintAll -
+      takenAll;
 
-  /// Calculate Actual Amount
+  /// Calculate Daily Actual Amount (across all 3 shifts)
+  /// Formula: End Reddy (S3) + End Balance (S1 + S2 + S3) + Transfer To Next (S3)
   static double actualAmount({
-    required double endReddy,
-    required double endBalance,
-    required double transferToNext,
+    required double endReddyS3,
+    required double endBalanceS1,
+    required double endBalanceS2,
+    required double endBalanceS3,
+    required double transferToNextS3,
   }) =>
-      endReddy + endBalance + transferToNext;
+      endReddyS3 + endBalanceS1 + endBalanceS2 + endBalanceS3 + transferToNextS3;
 
-  /// Calculate Shift Deviation
+  /// Calculate Deviation
   static double shiftDeviation({
     required double actualAmount,
     required double expectedAmount,

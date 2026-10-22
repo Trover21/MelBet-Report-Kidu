@@ -7,8 +7,22 @@ class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
 
+  // ── Production (Render) ──
+  static const String _prodBaseUrl =
+      'https://melbet-report-kidu.onrender.com/api';
+
+  // ── Local development (uncomment the one you need) ──
+  // static const String _localWeb     = 'http://127.0.0.1:3000/api';
+  // static const String _localAndroid = 'http://10.0.2.2:3000/api';
+  // static const String _localDesktop = 'http://localhost:3000/api';
+
+  /// Toggle this to `false` when developing locally.
+  static const bool useProduction = true;
+
   static String get defaultBaseUrl {
-    if (kIsWeb) return 'http://localhost:3000/api';
+    if (useProduction) return _prodBaseUrl;
+    // Local dev fallback
+    if (kIsWeb) return 'http://127.0.0.1:3000/api';
     if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:3000/api';
     }
