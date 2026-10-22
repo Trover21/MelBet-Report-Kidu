@@ -15,9 +15,19 @@ class ApiRepository implements AppRepository {
 
   // ── Helpers ───────────────────────────────────────────────────
   String _errorMessage(dynamic err) {
-    if (err is DioException && err.response?.data is Map) {
-      return (err.response!.data as Map)['error'] as String? ??
-          'An error occurred';
+    if (err is DioException) {
+      if (err.response?.data is Map) {
+        return (err.response!.data as Map)['error'] as String? ??
+            'An error occurred';
+      }
+      if (err.type == DioExceptionType.connectionTimeout ||
+          err.type == DioExceptionType.receiveTimeout ||
+          err.type == DioExceptionType.sendTimeout) {
+        return 'Server took too long to respond. It may be waking up, please try again.';
+      }
+      if (err.type == DioExceptionType.connectionError) {
+        return 'Cannot connect to server. Please check your internet connection.';
+      }
     }
     return 'Network error. Please check your connection.';
   }
