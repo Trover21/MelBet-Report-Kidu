@@ -20,16 +20,38 @@ class ApiRepository implements AppRepository {
         return (err.response!.data as Map)['error'] as String? ??
             'An error occurred';
       }
+      final statusCode = err.response?.statusCode;
+      if (statusCode == 404) {
+        return 'Feature endpoint not found on server (404). Please ensure the latest backend code is deployed on Render.';
+      }
+      if (statusCode == 401) {
+        return 'Session expired or unauthorized (401). Please log out and sign in again.';
+      }
+      if (statusCode == 403) {
+        return 'Access denied (403). Administrator permissions required.';
+      }
+      if (statusCode == 409) {
+        return 'Conflict (409): The requested item already exists.';
+      }
       if (err.type == DioExceptionType.connectionTimeout ||
           err.type == DioExceptionType.receiveTimeout ||
           err.type == DioExceptionType.sendTimeout) {
-        return 'Server took too long to respond. It may be waking up, please try again.';
+        return 'Server took too long to respond. Render may be waking up (takes ~50s). Please try again.';
       }
       if (err.type == DioExceptionType.connectionError) {
         return 'Cannot connect to server. Please check your internet connection.';
       }
+      if (err.error != null) {
+        final errStr = err.error.toString();
+        if (errStr.contains('Permission denied')) {
+          return 'Internet permission error. Please reinstall the updated app APK.';
+        }
+      }
+      if (statusCode != null) {
+        return 'Server returned error ($statusCode). Please try again.';
+      }
     }
-    return 'Network error. Please check your connection.';
+    return 'Connection error. Please check your internet or retry.';
   }
 
   // ── Init ──────────────────────────────────────────────────────

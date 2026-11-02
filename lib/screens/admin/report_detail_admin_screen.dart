@@ -53,8 +53,12 @@ class ReportDetailAdminScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            // ── Employee Info ──────────────────────────────────
+            // ── Employee, Time Interval & Team Info ───────────
             _employeeCard(context, report),
+            const SizedBox(height: 16),
+
+            // ── Admin Actions (Prominently placed at top) ──────
+            _adminActions(context, report, auth.user?.name ?? 'Admin'),
             const SizedBox(height: 16),
 
             // ── Super Manager Format Card ─────────────────────
@@ -101,9 +105,9 @@ class ReportDetailAdminScreen extends StatelessWidget {
             ]),
             const SizedBox(height: 12),
             _section(context, 'Calculated Results', [
-              _row(context, 'Expected Amount', report.expectedAmount),
-              _row(context, 'Actual Amount', report.actualAmount),
-              _rowDev(context, 'Deviation', report.deviation, devColor),
+              _row(context, 'Expected Amount', report.effectiveExpectedAmount),
+              _row(context, 'Actual Amount', report.effectiveActualAmount),
+              _rowDev(context, 'Deviation', report.effectiveDeviation, devColor),
             ]),
             const SizedBox(height: 16),
 
@@ -113,9 +117,7 @@ class ReportDetailAdminScreen extends StatelessWidget {
               const SizedBox(height: 16),
             ],
 
-            // ── Admin Actions ──────────────────────────────────
-            _adminActions(context, report, auth.user?.name ?? 'Admin'),
-            const SizedBox(height: 40),
+            const SizedBox(height: 30),
           ],
         ),
       ),
@@ -124,66 +126,129 @@ class ReportDetailAdminScreen extends StatelessWidget {
 
   Widget _employeeCard(BuildContext context, ShiftReport r) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.bgBorder),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppTheme.primary.withOpacity(0.2),
-            child: Text(
-              r.employeeName.substring(0, 1).toUpperCase(),
-              style: const TextStyle(
-                  color: AppTheme.primary, fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: AppTheme.primary.withOpacity(0.2),
+                child: Text(
+                  r.employeeName.isNotEmpty ? r.employeeName[0].toUpperCase() : 'E',
+                  style: const TextStyle(
+                      color: AppTheme.primary, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(r.employeeName,
-                        style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(6),
-                        border:
-                            Border.all(color: AppTheme.primary.withOpacity(0.4)),
-                      ),
-                      child: Text(
-                        r.teamName,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primary,
-                        ),
+                    Text(
+                      r.employeeName,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Submitted: ${AppUtils.formatDateTime(r.submittedAt)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              StatusBadge(status: r.status),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(height: 1, color: AppTheme.bgBorder),
+          const SizedBox(height: 14),
+          // Time Interval, Team Name, and Operating Date badges
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              // Team badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withOpacity(0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.groups_rounded, size: 16, color: Colors.lightBlueAccent),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Team: ${r.teamName}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.lightBlueAccent,
                       ),
                     ),
                   ],
                 ),
-                if (r.shiftStartTime.isNotEmpty && r.shiftEndTime.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text('Shift Time: ${r.shiftStartTime} – ${r.shiftEndTime}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          )),
-                ],
-                const SizedBox(height: 2),
-                Text('Submitted: ${AppUtils.formatDateTime(r.submittedAt)}',
-                    style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
+              ),
+              // Time Interval badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.accent.withOpacity(0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.schedule_rounded, size: 16, color: AppTheme.accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Time Interval: ${r.timeInterval}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Operating Date badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.bgBorder),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.calendar_today_rounded, size: 14, color: AppTheme.textSecondary),
+                    const SizedBox(width: 6),
+                    Text(
+                      AppUtils.formatDate(r.operatingDate),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -191,16 +256,25 @@ class ReportDetailAdminScreen extends StatelessWidget {
   }
 
   Widget _deviationHero(BuildContext context, ShiftReport r, Color color) {
+    final dev = r.effectiveDeviation;
+    final exp = r.effectiveExpectedAmount;
+    final act = r.effectiveActualAmount;
+    final heroColor = dev > 0
+        ? AppTheme.deviationPositive
+        : dev < 0
+            ? AppTheme.deviationNegative
+            : AppTheme.deviationZero;
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.15), AppTheme.bgCard],
+          colors: [heroColor.withOpacity(0.15), AppTheme.bgCard],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: heroColor.withOpacity(0.4)),
       ),
       child: Row(
         children: [
@@ -212,16 +286,16 @@ class ReportDetailAdminScreen extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 6),
                 Text(
-                  AppUtils.formatDeviation(r.deviation),
+                  AppUtils.formatDeviation(dev),
                   style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                        color: color,
+                        color: heroColor,
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '= Actual (${AppUtils.formatCurrency(r.actualAmount)}) '
-                  '− Expected (${AppUtils.formatCurrency(r.expectedAmount)})',
+                  '= Actual (${AppUtils.formatCurrency(act)}) '
+                  '− Expected (${AppUtils.formatCurrency(exp)})',
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -231,12 +305,12 @@ class ReportDetailAdminScreen extends StatelessWidget {
             ),
           ),
           Icon(
-            r.deviation > 0
+            dev > 0
                 ? Icons.trending_up_rounded
-                : r.deviation < 0
+                : dev < 0
                     ? Icons.trending_down_rounded
                     : Icons.trending_flat_rounded,
-            color: color,
+            color: heroColor,
             size: 56,
           ),
         ],
@@ -608,9 +682,9 @@ class ReportDetailAdminScreen extends StatelessWidget {
 
   String _generateWhatsAppReport(ShiftReport report) {
     final endAcc = report.endBalance + report.transferToNext;
-    final exp = report.initialReddy + report.initialAccount + report.totalCommission;
-    final act = report.endReddy + endAcc;
-    final dev = act - exp;
+    final exp = report.effectiveExpectedAmount;
+    final act = report.effectiveActualAmount;
+    final dev = report.effectiveDeviation;
     final devStr = dev >= 0 ? '+${AppUtils.formatCurrency(dev)}' : AppUtils.formatCurrency(dev);
 
     final buffer = StringBuffer();

@@ -13,7 +13,7 @@ import '../data/models/shift_report_model.dart';
 /// - Total Commi
 /// - End Ready
 /// - End Account
-/// - Expected = Initial Ready + Initial Account + Total Commi
+/// - Expected = Initial Ready + Initial Account + Total Commi + Added - Taken
 /// - Actual = End Ready + End Account
 /// - Dev = Actual - Expected
 class SuperManagerReportCard extends StatelessWidget {
@@ -52,9 +52,9 @@ class SuperManagerReportCard extends StatelessWidget {
 
   factory SuperManagerReportCard.fromReport(ShiftReport report, {String? customTitle}) {
     final endAcc = report.endBalance + report.transferToNext;
-    final exp = report.initialReddy + report.initialAccount + report.totalCommission;
-    final act = report.endReddy + endAcc;
-    final dev = act - exp;
+    final exp = report.effectiveExpectedAmount;
+    final act = report.effectiveActualAmount;
+    final dev = report.effectiveDeviation;
 
     return SuperManagerReportCard(
       title: customTitle ?? report.shiftLabel,
@@ -97,7 +97,7 @@ class SuperManagerReportCard extends StatelessWidget {
     buffer.writeln('🏦 End Account:     ${AppUtils.formatCurrency(endAccount)}');
     buffer.writeln('────────────────────────────────────────');
     buffer.writeln('🎯 Expected:        ${AppUtils.formatCurrency(expected)}');
-    buffer.writeln('   (Initial Ready + Initial Account + Total Commi)');
+    buffer.writeln('   (Initial Ready + Initial Account + Total Commi + Added - Taken)');
     buffer.writeln('⚖️ Actual:          ${AppUtils.formatCurrency(actual)}');
     buffer.writeln('   (End Ready + End Account)');
     buffer.writeln('📊 Dev:             $devStr');
@@ -242,7 +242,7 @@ class SuperManagerReportCard extends StatelessWidget {
                       _calcRow(
                         'Expected',
                         AppUtils.formatCurrency(expected),
-                        sub: 'Initial Ready + Initial Account + Total Commi',
+                        sub: 'Initial Ready + Initial Account + Total Commi + Added - Taken',
                         valueColor: AppTheme.textPrimary,
                       ),
                       const SizedBox(height: 8),

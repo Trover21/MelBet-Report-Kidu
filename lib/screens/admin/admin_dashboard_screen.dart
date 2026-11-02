@@ -8,7 +8,6 @@ import '../../providers/auth_provider.dart';
 import '../../providers/report_provider.dart';
 import '../../data/models/shift_report_model.dart';
 import '../../data/models/user_model.dart';
-import 'widgets/status_badge.dart';
 import '../../widgets/super_manager_report_card.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -45,6 +44,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   String _dailyIntervalPreset = 'all';
   String _userFilter = 'all'; // 'all', 'pending', 'active', 'disabled'
   int _selectedTodayShift = 1; // 1, 2, 3, or 0 (0 = 24H aggregate)
+
+  // Multi-select delete — stores the dates (as midnight DateTime keys) of selected daily summaries
+  final Set<String> _selectedDates = {}; // keyed by date ISO string yyyy-MM-dd
+  bool get _isSelecting => _selectedDates.isNotEmpty;
 
   @override
   void dispose() {
@@ -99,30 +102,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               gradient: AppTheme.primaryGradient,
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.bar_chart_rounded,
-                color: Colors.white, size: 22),
+                color: Colors.white, size: 20),
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                auth.user?.role == UserRole.manager
-                    ? 'Manager Dashboard'
-                    : 'Admin Dashboard',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              Text(AppUtils.formatDate(DateTime.now()),
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  auth.user?.role == UserRole.manager
+                      ? 'Manager Dashboard'
+                      : 'Admin Dashboard',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  AppUtils.formatDate(DateTime.now()),
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 6),
           // Team management (Admin) or Team requests (Manager)
           Stack(
             clipBehavior: Clip.none,
@@ -133,7 +147,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       ? Icons.groups_rounded
                       : Icons.group_add_rounded,
                   color: AppTheme.accent,
+                  size: 22,
                 ),
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
                 tooltip: auth.isStrictAdmin
                     ? 'Manage Teams & Requests'
                     : 'Manage My Teams',
@@ -142,11 +159,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               if (auth.isStrictAdmin &&
                   auth.teamRequests.any((r) => r.isPending))
                 Positioned(
-                  right: 8,
-                  top: 8,
+                  right: 4,
+                  top: 4,
                   child: Container(
-                    width: 9,
-                    height: 9,
+                    width: 8,
+                    height: 8,
                     decoration: const BoxDecoration(
                       color: AppTheme.error,
                       shape: BoxShape.circle,
@@ -155,62 +172,391 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ),
             ],
           ),
-          // Change Password button (Admin can change pw)
+          const SizedBox(width: 2),
           IconButton(
-            icon: const Icon(Icons.key_rounded, color: AppTheme.textSecondary),
-            tooltip: 'Change Password',
-            onPressed: () => _showChangePasswordDialog(context),
-          ),
-          IconButton(
-            icon:
-                const Icon(Icons.date_range_rounded, color: AppTheme.accent),
+            icon: const Icon(Icons.date_range_rounded, color: AppTheme.accent, size: 22),
+            padding: const EdgeInsets.all(8),
+            constraints: const BoxConstraints(),
             onPressed: () => context.push('/admin/date-interval'),
             tooltip: 'Date Interval Report',
           ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: AppTheme.textSecondary),
-            tooltip: 'Log out',
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Row(
-                    children: [
-                      Icon(Icons.logout_rounded, color: AppTheme.error, size: 22),
-                      SizedBox(width: 8),
-                      Text('Log Out'),
-                    ],
-                  ),
-                  content: const Text(
-                    'Do you want to log out?',
-                    style: TextStyle(fontSize: 15),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.error,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Log Out'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirm == true && context.mounted) {
-                await auth.logout();
-                if (context.mounted) {
-                  context.go('/login');
-                }
-              }
-            },
-          ),
+          const SizedBox(width: 4),
+          // Combined Profile Dropdown (Change Password & Log Out)
+          _buildProfileMenu(context, auth),
         ],
       ),
+    );
+  }
+
+  Widget _buildProfileMenu(BuildContext context, AuthProvider auth) {
+    final displayName = auth.user?.name ?? 'Admin';
+    final roleLabel = auth.user?.role == UserRole.manager ? 'Manager' : 'Administrator';
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'A';
+    final roleColor = auth.user?.role == UserRole.manager
+        ? const Color(0xFFF59E0B)
+        : const Color(0xFF38BDF8);
+
+    return PopupMenuButton<String>(
+      tooltip: 'Account Menu',
+      color: const Color(0xFF131D2E),
+      surfaceTintColor: Colors.transparent,
+      elevation: 16,
+      shadowColor: Colors.black.withOpacity(0.6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFF2B3A54), width: 1.2),
+      ),
+      offset: const Offset(0, 46),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1E293B), Color(0xFF131D2E)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: const Color(0xFF2C3E5E),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFF60A5FA).withOpacity(0.6),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF2563EB).withOpacity(0.35),
+                    blurRadius: 5,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Color(0xFF94A3B8),
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+      onSelected: (val) async {
+        if (val == 'change_password') {
+          _showChangePasswordDialog(context);
+        } else if (val == 'logout') {
+          final confirm = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF131D2E),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: const BorderSide(color: Color(0xFF2B3A54), width: 1.2),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.logout_rounded,
+                      color: Color(0xFFF87171),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Log Out',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                    ),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'Are you sure you want to log out of your session?',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Color(0xFF94A3B8)),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text(
+                    'Log Out',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          );
+          if (confirm == true && context.mounted) {
+            await auth.logout();
+            if (context.mounted) {
+              context.go('/login');
+            }
+          }
+        }
+      },
+      itemBuilder: (ctx) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E293B), Color(0xFF151F30)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF2A3952)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF93C5FD), width: 1.2),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: roleColor.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: roleColor.withOpacity(0.4), width: 0.8),
+                        ),
+                        child: Text(
+                          roleLabel.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: roleColor,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const PopupMenuDivider(height: 1),
+        PopupMenuItem<String>(
+          value: 'change_password',
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E283D).withOpacity(0.45),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF2C3E5E).withOpacity(0.6)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withOpacity(0.16),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withOpacity(0.4),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.lock_reset_rounded,
+                    size: 18,
+                    color: Color(0xFFFBBF24),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Change Password',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFF1F5F9),
+                        ),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        'Update credentials',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 12,
+                  color: Color(0xFF64748B),
+                ),
+              ],
+            ),
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'logout',
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEF4444).withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFFEF4444).withOpacity(0.45),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.logout_rounded,
+                    size: 17,
+                    color: Color(0xFFF87171),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Log Out',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFF87171),
+                        ),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        'Sign out of account',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFFE28A8A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 12,
+                  color: Color(0xFFEF4444),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -591,7 +937,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 label: 'Shift 1',
                 shiftNum: 1,
                 hasReport: s1 != null,
-                dev: s1?.deviation,
+                dev: s1?.effectiveDeviation,
                 isSelected: _selectedTodayShift == 1,
                 onTap: () => setState(() => _selectedTodayShift = 1),
               ),
@@ -600,7 +946,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 label: 'Shift 2',
                 shiftNum: 2,
                 hasReport: s2 != null,
-                dev: s2?.deviation,
+                dev: s2?.effectiveDeviation,
                 isSelected: _selectedTodayShift == 2,
                 onTap: () => setState(() => _selectedTodayShift = 2),
               ),
@@ -609,7 +955,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 label: 'Shift 3',
                 shiftNum: 3,
                 hasReport: s3 != null,
-                dev: s3?.deviation,
+                dev: s3?.effectiveDeviation,
                 isSelected: _selectedTodayShift == 3,
                 onTap: () => setState(() => _selectedTodayShift = 3),
               ),
@@ -729,7 +1075,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     final endReady = last.endReddy;
     final endAcc = last.endBalance + last.transferToNext;
 
-    final exp = initReady + initAcc + totComm;
+    final totAdded = todayReports.fold(0.0, (s, r) => s + r.added);
+    final totTaken = todayReports.fold(0.0, (s, r) => s + r.taken);
+
+    final exp = initReady + initAcc + totComm + totAdded - totTaken;
     final act = endReady + endAcc;
     final dev = rp.todays24HourDeviation ?? (act - exp);
 
@@ -886,192 +1235,238 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Widget _buildFilterBar(BuildContext context, ReportProvider rp) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: AppTheme.bgCard,
-      child: Row(
-        children: [
-          // Employee filter
-          Expanded(
-            child: DropdownButtonHideUnderline(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // Employee filter
+            SizedBox(
+              width: 140,
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: rp.filterEmployeeId?.isEmpty ?? true
+                      ? null
+                      : rp.filterEmployeeId,
+                  hint: const Text('All Employees',
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  dropdownColor: AppTheme.bgCard,
+                  isDense: true,
+                  isExpanded: true,
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary, fontSize: 12),
+                  items: [
+                    const DropdownMenuItem(
+                        value: null, child: Text('All Employees')),
+                    ...rp.employees.map((e) => DropdownMenuItem(
+                          value: e.id,
+                          child: Text(e.name, overflow: TextOverflow.ellipsis),
+                        )),
+                  ],
+                  onChanged: (v) => rp.setFilters(
+                    start: rp.filterStart,
+                    end: rp.filterEnd,
+                    employeeId: v,
+                    shift: rp.filterShift,
+                    teamNumber: rp.filterTeamNumber,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Team filter
+            DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: rp.filterEmployeeId?.isEmpty ?? true
-                    ? null
-                    : rp.filterEmployeeId,
-                hint: const Text('All Employees',
+                value: rp.filterTeamName,
+                hint: const Text('All Teams',
                     style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
                 dropdownColor: AppTheme.bgCard,
+                isDense: true,
                 style: const TextStyle(
                     color: AppTheme.textPrimary, fontSize: 12),
                 items: [
-                  const DropdownMenuItem(
-                      value: null, child: Text('All Employees')),
-                  ...rp.employees.map((e) => DropdownMenuItem(
-                        value: e.id,
-                        child: Text(e.name),
+                  const DropdownMenuItem(value: null, child: Text('All Teams')),
+                  ...rp.availableTeamNames.map((t) => DropdownMenuItem(
+                        value: t,
+                        child: Text(t),
                       )),
                 ],
                 onChanged: (v) => rp.setFilters(
                   start: rp.filterStart,
                   end: rp.filterEnd,
-                  employeeId: v,
+                  employeeId: rp.filterEmployeeId,
                   shift: rp.filterShift,
+                  teamName: v,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Shift filter
+            DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: rp.filterShift,
+                hint: const Text('All Shifts',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                dropdownColor: AppTheme.bgCard,
+                isDense: true,
+                style: const TextStyle(
+                    color: AppTheme.textPrimary, fontSize: 12),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All Shifts')),
+                  ...List.generate(3, (i) => DropdownMenuItem(
+                        value: i + 1,
+                        child: Text('Shift ${i + 1}'),
+                      )),
+                ],
+                onChanged: (v) => rp.setFilters(
+                  start: rp.filterStart,
+                  end: rp.filterEnd,
+                  employeeId: rp.filterEmployeeId,
+                  shift: v,
                   teamNumber: rp.filterTeamNumber,
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          // Team filter
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: rp.filterTeamName,
-              hint: const Text('All Teams',
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-              dropdownColor: AppTheme.bgCard,
-              style: const TextStyle(
-                  color: AppTheme.textPrimary, fontSize: 12),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('All Teams')),
-                ...rp.availableTeamNames.map((t) => DropdownMenuItem(
-                      value: t,
-                      child: Text(t),
-                    )),
-              ],
-              onChanged: (v) => rp.setFilters(
-                start: rp.filterStart,
-                end: rp.filterEnd,
-                employeeId: rp.filterEmployeeId,
-                shift: rp.filterShift,
-                teamName: v,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Shift filter
-          DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: rp.filterShift,
-              hint: const Text('All Shifts',
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-              dropdownColor: AppTheme.bgCard,
-              style: const TextStyle(
-                  color: AppTheme.textPrimary, fontSize: 12),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('All Shifts')),
-                ...List.generate(3, (i) => DropdownMenuItem(
-                      value: i + 1,
-                      child: Text('Shift ${i + 1}'),
-                    )),
-              ],
-              onChanged: (v) => rp.setFilters(
-                start: rp.filterStart,
-                end: rp.filterEnd,
-                employeeId: rp.filterEmployeeId,
-                shift: v,
-                teamNumber: rp.filterTeamNumber,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildAdminReportCard(
       BuildContext context, ShiftReport report, int index) {
-    final devColor = report.deviation > 0
+    final dev = report.effectiveDeviation;
+    final devColor = dev > 0
         ? AppTheme.deviationPositive
-        : report.deviation < 0
+        : dev < 0
             ? AppTheme.deviationNegative
             : AppTheme.deviationZero;
+
+    // Subtle left-border color hint for status — no badge needed on the card
+    final statusAccent = report.status == ReportStatus.correctionRequested
+        ? AppTheme.warning
+        : report.status == ReportStatus.approved
+            ? AppTheme.success
+            : AppTheme.bgBorder;
 
     return GestureDetector(
       onTap: () => context.push('/admin/report/${report.id}'),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppTheme.bgBorder),
         ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                // Shift badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    report.shiftLabel,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              // Status accent left bar
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: statusAccent,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(14),
+                    bottomLeft: Radius.circular(14),
                   ),
                 ),
-                const SizedBox(width: 6),
-                // Team badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.18),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.blue.withOpacity(0.4)),
-                  ),
-                  child: Text(
-                    report.teamName,
-                    style: const TextStyle(
-                      color: Colors.lightBlueAccent,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  AppUtils.formatDate(report.operatingDate),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          // Shift badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.primaryGradient,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'S${report.shiftNumber}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          // Team badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.18),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color: Colors.blue.withOpacity(0.4)),
+                            ),
+                            child: Text(
+                              report.teamName,
+                              style: const TextStyle(
+                                color: Colors.lightBlueAccent,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${AppUtils.formatDate(report.operatingDate)} • ${report.employeeName}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // Chevron hint — tap for details
+                          const Icon(Icons.chevron_right,
+                              size: 16, color: AppTheme.textMuted),
+                        ],
                       ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    report.employeeName,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _miniInfo(context, 'Deposit',
+                              AppUtils.formatCurrency(report.totalDeposit)),
+                          _miniInfo(context, 'Withdrawal',
+                              AppUtils.formatCurrency(report.totalWithdrawal)),
+                          _miniInfo(
+                              context,
+                              'Commission',
+                              AppUtils.formatCurrency(report.totalCommission),
+                              color: AppTheme.success),
+                          _miniInfo(
+                              context,
+                              'Deviation',
+                              AppUtils.formatDeviation(dev),
+                              color: devColor),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                StatusBadge(status: report.status),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _miniInfo(context, 'Deposit',
-                    AppUtils.formatCurrency(report.totalDeposit)),
-                _miniInfo(context, 'Withdrawal',
-                    AppUtils.formatCurrency(report.totalWithdrawal)),
-                _miniInfo(context, 'Commission',
-                    AppUtils.formatCurrency(report.totalCommission),
-                    color: AppTheme.success),
-                _miniInfo(context, 'Deviation',
-                    AppUtils.formatDeviation(report.deviation),
-                    color: devColor),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ).animate(delay: Duration(milliseconds: index * 40)).fadeIn(),
     );
+
   }
+
 
   Widget _miniInfo(BuildContext context, String label, String value,
       {Color? color}) {
@@ -1131,26 +1526,52 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       return true;
     }).toList();
 
-    // Calculate total deviation, expected, actual across the interval
+    // Calculate totals
     final totalIntervalDeviation = summaries.fold<double>(
-      0.0,
-      (sum, s) => sum + (s.dailyDeviation ?? 0.0),
+      0.0, (sum, s) => sum + (s.dailyDeviation ?? 0.0),
     );
     final totalIntervalExpected = summaries.fold<double>(
-      0.0,
-      (sum, s) => sum + s.expectedAmount,
+      0.0, (sum, s) => sum + s.expectedAmount,
     );
     final totalIntervalActual = summaries.fold<double>(
-      0.0,
-      (sum, s) => sum + s.actualAmount,
+      0.0, (sum, s) => sum + s.actualAmount,
     );
+
+    // Collect all report IDs for selected dates
+    List<String> selectedReportIds() {
+      final ids = <String>[];
+      for (final s in summaries) {
+        final key = _dateKey(s.date);
+        if (_selectedDates.contains(key)) {
+          if (s.shift1 != null) ids.add(s.shift1!.id);
+          if (s.shift2 != null) ids.add(s.shift2!.id);
+          if (s.shift3 != null) ids.add(s.shift3!.id);
+        }
+      }
+      return ids;
+    }
 
     return Column(
       children: [
-        // ── Interval Selector Filter Header ────────────────────────
+        // ── Interval Selector Filter Header ─────────────────────────
         _buildDailyIntervalFilterBar(context),
 
-        // ── List of Daily Summaries ────────────────────────────────
+        // ── Selection Action Bar (shown when ≥1 card selected) ──────
+        if (_isSelecting)
+          _buildSelectionBar(
+            context,
+            rp,
+            selectedCount: _selectedDates.length,
+            totalCount: summaries.length,
+            onSelectAll: () => setState(() {
+              _selectedDates.clear();
+              _selectedDates.addAll(summaries.map((s) => _dateKey(s.date)));
+            }),
+            onDeselectAll: () => setState(() => _selectedDates.clear()),
+            onDelete: () => _confirmDeleteSelected(context, rp, selectedReportIds()),
+          ),
+
+        // ── List of Daily Summaries ──────────────────────────────────
         Expanded(
           child: summaries.isEmpty
               ? Center(
@@ -1188,7 +1609,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ),
         ),
 
-        // ── Total Deviation in Interval (Bottom Bar) ───────────────
+        // ── Bottom Bar ───────────────────────────────────────────────
         _buildDailyIntervalBottomBar(
           context,
           count: summaries.length,
@@ -1199,6 +1620,173 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       ],
     );
   }
+
+  String _dateKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Widget _buildSelectionBar(
+    BuildContext context,
+    ReportProvider rp, {
+    required int selectedCount,
+    required int totalCount,
+    required VoidCallback onSelectAll,
+    required VoidCallback onDeselectAll,
+    required VoidCallback onDelete,
+  }) {
+    final allSelected = selectedCount == totalCount;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: AppTheme.bgCard,
+      child: Row(
+        children: [
+          // Checkbox-style toggle all
+          GestureDetector(
+            onTap: allSelected ? onDeselectAll : onSelectAll,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: allSelected
+                    ? AppTheme.primary.withOpacity(0.2)
+                    : AppTheme.bgSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: allSelected ? AppTheme.primary : AppTheme.bgBorder),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    allSelected
+                        ? Icons.check_box_rounded
+                        : Icons.check_box_outline_blank_rounded,
+                    size: 16,
+                    color: allSelected ? AppTheme.primary : AppTheme.textMuted,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    allSelected ? 'Deselect All' : 'Select All',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: allSelected ? AppTheme.primary : AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Selected count chip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '$selectedCount selected',
+              style: const TextStyle(
+                color: AppTheme.primary,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const Spacer(),
+          // Cancel
+          TextButton(
+            onPressed: () => setState(() => _selectedDates.clear()),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+          ),
+          const SizedBox(width: 4),
+          // Delete button
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              textStyle:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+            ),
+            icon: const Icon(Icons.delete_rounded, size: 16),
+            label: const Text('Delete'),
+            onPressed: onDelete,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteSelected(
+    BuildContext context,
+    ReportProvider rp,
+    List<String> reportIds,
+  ) async {
+    if (reportIds.isEmpty) return;
+    final count = _selectedDates.length;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: AppTheme.error, size: 24),
+            SizedBox(width: 10),
+            Text('Delete Reports?'),
+          ],
+        ),
+        content: Text(
+          'You are about to permanently delete all shift reports for '
+          '$count day${count > 1 ? 's' : ''} (${ reportIds.length} report${reportIds.length > 1 ? 's' : ''}).\n\n'
+          'This action cannot be undone.',
+          style: const TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final deleted = await rp.deleteReports(reportIds);
+    setState(() => _selectedDates.clear());
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            deleted > 0
+                ? 'Deleted $deleted report${deleted > 1 ? 's' : ''} successfully.'
+                : 'No reports were deleted.',
+          ),
+          backgroundColor:
+              deleted > 0 ? const Color(0xFF22C55E) : AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
 
   Widget _buildDailyIntervalFilterBar(BuildContext context) {
     return Container(

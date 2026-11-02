@@ -117,6 +117,17 @@ class AppUtils {
   }) =>
       endReddyS3 + endBalanceS1 + endBalanceS2 + endBalanceS3 + transferToNextS3;
 
+  /// Calculate Shift Expected Amount
+  /// Formula: Initial Reddy + Initial Account + Total Commission + Added − Taken
+  static double shiftExpectedAmount({
+    required double initialReddy,
+    required double initialAccount,
+    required double totalCommission,
+    double added = 0.0,
+    double taken = 0.0,
+  }) =>
+      initialReddy + initialAccount + totalCommission + added - taken;
+
   /// Calculate Deviation
   static double shiftDeviation({
     required double actualAmount,

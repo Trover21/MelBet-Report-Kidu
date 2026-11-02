@@ -215,6 +215,21 @@ class ReportProvider extends ChangeNotifier {
     }
   }
 
+  /// Bulk-delete a list of report IDs. Returns the count of successfully deleted reports.
+  Future<int> deleteReports(List<String> reportIds) async {
+    int deleted = 0;
+    for (final id in reportIds) {
+      try {
+        await _repo.deleteReport(id);
+        _reports.removeWhere((r) => r.id == id);
+        deleted++;
+      } catch (_) {}
+    }
+    notifyListeners();
+    return deleted;
+  }
+
+
   Future<void> updateStatus(
       String reportId, ReportStatus status, String adminName,
       {String? notes}) async {

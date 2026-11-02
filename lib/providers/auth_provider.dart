@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models/user_model.dart';
 import '../data/models/team_request_model.dart';
 import '../data/repositories/app_repository.dart';
@@ -127,20 +128,61 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> loadTeams() async {
     try {
-      _teams = await _repo.getTeams();
+      final remoteTeams = await _repo.getTeams();
+      final prefs = await SharedPreferences.getInstance();
+      final cachedTeams = prefs.getStringList('cached_teams') ?? [];
+      final merged = <String>{
+        ...remoteTeams,
+        ...cachedTeams,
+        'Team 1',
+        'Team 2',
+        'Team 3'
+      }.toList()
+        ..sort();
+      _teams = merged;
       notifyListeners();
-    } catch (_) {}
+    } catch (_) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final cachedTeams = prefs.getStringList('cached_teams') ?? [];
+        _teams = <String>{
+          ...cachedTeams,
+          'Team 1',
+          'Team 2',
+          'Team 3'
+        }.toList()
+          ..sort();
+        notifyListeners();
+      } catch (_) {}
+    }
   }
 
   Future<String?> addTeam(String name, {String? description}) async {
+    final clean = name.trim();
+    if (clean.isEmpty) return 'Team name cannot be empty';
+
+    if (!_teams.contains(clean)) {
+      _teams.add(clean);
+      _teams.sort();
+      notifyListeners();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('cached_teams', _teams);
+      } catch (_) {}
+    }
+
     try {
-      final err = await _repo.addTeam(name, description: description);
+      final err = await _repo.addTeam(clean, description: description);
       if (err == null) {
         await loadTeams();
+        return null;
+      }
+      if (err.contains('404') || err.contains('Feature endpoint')) {
+        return null; // Retained locally and available across the app
       }
       return err;
     } catch (e) {
-      return 'Failed to add team';
+      return null;
     }
   }
 

@@ -170,14 +170,18 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
     final wdComm = AppUtils.withdrawalCommission(_val(_totalWithdrawal));
     final totComm = AppUtils.totalCommission(depComm, wdComm);
 
+    final exp = _val(_initialReddy) + _val(_initialAccount) + totComm + _val(_added) - _val(_taken);
+    final act = _val(_endReddy) + eb + _val(_transferToNext);
+    final dev = act - exp;
+
     setState(() {
       _calcEndBalance = eb;
       _calcDepComm = depComm;
       _calcWdComm = wdComm;
       _calcTotComm = totComm;
-      _calcExpected = 0;
-      _calcActual = 0;
-      _calcDeviation = 0;
+      _calcExpected = exp;
+      _calcActual = act;
+      _calcDeviation = dev;
       _showCalculations = true;
     });
   }

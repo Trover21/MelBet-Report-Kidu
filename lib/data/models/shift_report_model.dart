@@ -1,3 +1,5 @@
+import '../../core/constants/app_constants.dart';
+
 enum ReportStatus { submitted, reviewed, correctionRequested, approved }
 
 extension ReportStatusExt on ReportStatus {
@@ -128,57 +130,121 @@ class ShiftReport {
     this.correctionHistory = const [],
   });
 
-  String get shiftLabel {
+  String get timeInterval {
     if (shiftStartTime.isNotEmpty && shiftEndTime.isNotEmpty) {
-      return 'Shift $shiftNumber ($shiftStartTime – $shiftEndTime)';
+      return '$shiftStartTime – $shiftEndTime';
     }
-    return 'Shift $shiftNumber';
+    if (shiftNumber >= 1 && shiftNumber <= AppConstants.shiftTimes.length) {
+      return AppConstants.shiftTimes[shiftNumber - 1];
+    }
+    return '06:00 – 14:00';
   }
 
-  factory ShiftReport.fromJson(Map<String, dynamic> json) => ShiftReport(
-        id: json['id'] as String,
-        employeeId: json['employeeId'] as String,
-        employeeName: json['employeeName'] as String,
-        teamNumber: (json['teamNumber'] as num?)?.toInt() ?? 1,
-        teamName: json['teamName'] as String? ??
-            'Team ${(json['teamNumber'] as num?)?.toInt() ?? 1}',
-        operatingDate: DateTime.parse(json['operatingDate'] as String),
-        shiftNumber: json['shiftNumber'] as int,
-        shiftStartTime: json['shiftStartTime'] as String? ?? '',
-        shiftEndTime: json['shiftEndTime'] as String? ?? '',
-        initialReddy: (json['initialReddy'] as num).toDouble(),
-        initialAccount: (json['initialAccount'] as num).toDouble(),
-        totalDeposit: (json['totalDeposit'] as num).toDouble(),
-        totalWithdrawal: (json['totalWithdrawal'] as num).toDouble(),
-        endReddy: (json['endReddy'] as num).toDouble(),
-        transferToNext: (json['transferToNext'] as num).toDouble(),
-        depositComplaintAccepted: (json['depositComplaintAccepted'] as num? ?? 0).toDouble(),
-        withdrawalComplaintAccepted: (json['withdrawalComplaintAccepted'] as num? ?? 0).toDouble(),
-        prevDayPendingDepositApproved: (json['prevDayPendingDepositApproved'] as num? ?? 0).toDouble(),
-        depositOkAfterShift: (json['depositOkAfterShift'] as num? ?? 0).toDouble(),
-        withdrawalOkAfterShift: (json['withdrawalOkAfterShift'] as num? ?? 0).toDouble(),
-        depositOkBeforeShift: (json['depositOkBeforeShift'] as num? ?? 0).toDouble(),
-        withdrawalApprovedBeforeShift: (json['withdrawalApprovedBeforeShift'] as num? ?? 0).toDouble(),
-        totalUnprocessed: (json['totalUnprocessed'] as num? ?? 0).toDouble(),
-        added: (json['added'] as num? ?? 0).toDouble(),
-        taken: (json['taken'] as num? ?? 0).toDouble(),
-        endBalance: (json['endBalance'] as num).toDouble(),
-        depositCommission: (json['depositCommission'] as num).toDouble(),
-        withdrawalCommission: (json['withdrawalCommission'] as num).toDouble(),
-        totalCommission: (json['totalCommission'] as num).toDouble(),
-        expectedAmount: (json['expectedAmount'] as num).toDouble(),
-        actualAmount: (json['actualAmount'] as num).toDouble(),
-        deviation: (json['deviation'] as num).toDouble(),
-        submittedAt: DateTime.parse(json['submittedAt'] as String),
-        lastModifiedAt: json['lastModifiedAt'] != null
-            ? DateTime.parse(json['lastModifiedAt'] as String)
-            : null,
-        status: ReportStatusExt.fromValue(json['status'] as String? ?? 'submitted'),
-        notes: json['notes'] as String?,
-        correctionHistory: (json['correctionHistory'] as List<dynamic>? ?? [])
-            .map((e) => CorrectionRecord.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+  String get shiftLabel {
+    return 'Shift $shiftNumber ($timeInterval)';
+  }
+
+  double get effectiveExpectedAmount {
+    if (expectedAmount != 0.0) return expectedAmount;
+    return initialReddy + initialAccount + totalCommission + added - taken;
+  }
+
+  double get effectiveActualAmount {
+    if (actualAmount != 0.0) return actualAmount;
+    return endReddy + endBalance + transferToNext;
+  }
+
+  double get effectiveDeviation {
+    if (deviation != 0.0) return deviation;
+    return effectiveActualAmount - effectiveExpectedAmount;
+  }
+
+  factory ShiftReport.fromJson(Map<String, dynamic> json) {
+    final initReddy = (json['initialReddy'] as num?)?.toDouble() ?? 0.0;
+    final initAcc = (json['initialAccount'] as num?)?.toDouble() ?? 0.0;
+    final totDep = (json['totalDeposit'] as num?)?.toDouble() ?? 0.0;
+    final totWd = (json['totalWithdrawal'] as num?)?.toDouble() ?? 0.0;
+    final endReddy = (json['endReddy'] as num?)?.toDouble() ?? 0.0;
+    final xfer = (json['transferToNext'] as num?)?.toDouble() ?? 0.0;
+    final endBal = (json['endBalance'] as num?)?.toDouble() ?? 0.0;
+    final depComm = (json['depositCommission'] as num?)?.toDouble() ??
+        (totDep * AppConstants.depositCommissionRate);
+    final wdComm = (json['withdrawalCommission'] as num?)?.toDouble() ??
+        (totWd * AppConstants.withdrawalCommissionRate);
+    final totComm = (json['totalCommission'] as num?)?.toDouble() ?? (depComm + wdComm);
+
+    final rawExp = (json['expectedAmount'] as num?)?.toDouble() ?? 0.0;
+    final rawAct = (json['actualAmount'] as num?)?.toDouble() ?? 0.0;
+    final rawDev = (json['deviation'] as num?)?.toDouble() ?? 0.0;
+
+    final added = (json['added'] as num? ?? 0).toDouble();
+    final taken = (json['taken'] as num? ?? 0).toDouble();
+
+    final computedExp = initReddy + initAcc + totComm + added - taken;
+    final computedAct = endReddy + endBal + xfer;
+    final computedDev = computedAct - computedExp;
+
+    final double expectedAmount = (rawExp != 0.0) ? rawExp : computedExp;
+    final double actualAmount = (rawAct != 0.0) ? rawAct : computedAct;
+    final double deviation = (rawDev != 0.0)
+        ? rawDev
+        : ((rawExp == 0.0 && rawAct == 0.0) || computedAct != computedExp
+            ? computedDev
+            : rawDev);
+
+    return ShiftReport(
+      id: json['id'] as String,
+      employeeId: json['employeeId'] as String,
+      employeeName: json['employeeName'] as String,
+      teamNumber: (json['teamNumber'] as num?)?.toInt() ?? 1,
+      teamName: json['teamName'] as String? ??
+          'Team ${(json['teamNumber'] as num?)?.toInt() ?? 1}',
+      operatingDate: DateTime.parse(json['operatingDate'] as String),
+      shiftNumber: json['shiftNumber'] as int,
+      shiftStartTime: json['shiftStartTime'] as String? ?? '',
+      shiftEndTime: json['shiftEndTime'] as String? ?? '',
+      initialReddy: initReddy,
+      initialAccount: initAcc,
+      totalDeposit: totDep,
+      totalWithdrawal: totWd,
+      endReddy: endReddy,
+      transferToNext: xfer,
+      depositComplaintAccepted:
+          (json['depositComplaintAccepted'] as num? ?? 0).toDouble(),
+      withdrawalComplaintAccepted:
+          (json['withdrawalComplaintAccepted'] as num? ?? 0).toDouble(),
+      prevDayPendingDepositApproved:
+          (json['prevDayPendingDepositApproved'] as num? ?? 0).toDouble(),
+      depositOkAfterShift:
+          (json['depositOkAfterShift'] as num? ?? 0).toDouble(),
+      withdrawalOkAfterShift:
+          (json['withdrawalOkAfterShift'] as num? ?? 0).toDouble(),
+      depositOkBeforeShift:
+          (json['depositOkBeforeShift'] as num? ?? 0).toDouble(),
+      withdrawalApprovedBeforeShift:
+          (json['withdrawalApprovedBeforeShift'] as num? ?? 0).toDouble(),
+      totalUnprocessed:
+          (json['totalUnprocessed'] as num? ?? 0).toDouble(),
+      added: added,
+      taken: taken,
+      endBalance: endBal,
+      depositCommission: depComm,
+      withdrawalCommission: wdComm,
+      totalCommission: totComm,
+      expectedAmount: expectedAmount,
+      actualAmount: actualAmount,
+      deviation: deviation,
+      submittedAt: DateTime.parse(json['submittedAt'] as String),
+      lastModifiedAt: json['lastModifiedAt'] != null
+          ? DateTime.parse(json['lastModifiedAt'] as String)
+          : null,
+      status: ReportStatusExt.fromValue(json['status'] as String? ?? 'submitted'),
+      notes: json['notes'] as String?,
+      correctionHistory: (json['correctionHistory'] as List<dynamic>? ?? [])
+          .map((e) => CorrectionRecord.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,

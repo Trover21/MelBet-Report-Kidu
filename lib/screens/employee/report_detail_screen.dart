@@ -67,8 +67,8 @@ class ReportDetailScreen extends StatelessWidget {
             _sectionCard(context, 'Submission Info', [
               _rowText(context, 'Submitted By', report.employeeName),
               _rowText(context, 'Team', report.teamName),
-              if (report.shiftStartTime.isNotEmpty && report.shiftEndTime.isNotEmpty)
-                _rowText(context, 'Shift Time', '${report.shiftStartTime} – ${report.shiftEndTime}'),
+              _rowText(context, 'Time Interval', report.timeInterval),
+              _rowText(context, 'Operating Date', AppUtils.formatDate(report.operatingDate)),
               _rowText(context, 'Submitted At', AppUtils.formatDateTime(report.submittedAt)),
               _rowText(context, 'Status', report.status.label),
               if (report.notes != null && report.notes!.isNotEmpty)
