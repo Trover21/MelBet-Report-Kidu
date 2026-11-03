@@ -49,6 +49,7 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
   final _totalUnprocessed = TextEditingController();
   final _added = TextEditingController();
   final _taken = TextEditingController();
+  final _commentCtrl = TextEditingController();
 
   bool _isSubmitting = false;
   bool _showCalculations = false;
@@ -129,6 +130,9 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
                 existing.added > 0 ? existing.added.toStringAsFixed(2) : '';
             _taken.text =
                 existing.taken > 0 ? existing.taken.toStringAsFixed(2) : '';
+            if (existing.notes != null && existing.notes!.isNotEmpty) {
+              _commentCtrl.text = existing.notes!;
+            }
             _recalculate();
           });
         }
@@ -144,7 +148,7 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
       _endReddy, _transferToNext, _depositComplaint, _withdrawalComplaint,
       _prevDayPending, _depositAfterShift, _withdrawalAfterShift,
       _depositBeforeShift, _withdrawalBeforeShift, _totalUnprocessed,
-      _added, _taken,
+      _added, _taken, _commentCtrl,
     ]) {
       c.dispose();
     }
@@ -239,6 +243,9 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
         expectedAmount: _calcExpected,
         actualAmount: _calcActual,
         deviation: _calcDeviation,
+        notes: _commentCtrl.text.trim().isNotEmpty
+            ? _commentCtrl.text.trim()
+            : null,
         lastModifiedAt: DateTime.now(),
         status: isPrivileged
             ? _existingReport!.status
@@ -307,6 +314,9 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
       expectedAmount: _calcExpected,
       actualAmount: _calcActual,
       deviation: _calcDeviation,
+      notes: _commentCtrl.text.trim().isNotEmpty
+          ? _commentCtrl.text.trim()
+          : null,
       submittedAt: DateTime.now(),
     ));
 
@@ -388,7 +398,8 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
                 ),
               ],
               if (_existingReport?.notes != null &&
-                  _existingReport!.notes!.isNotEmpty) ...[
+                  _existingReport!.notes!.isNotEmpty &&
+                  _existingReport!.status == ReportStatus.correctionRequested) ...[
                 Container(
                   padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.only(bottom: 20),
@@ -542,6 +553,12 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
                 _buildCalcCard(),
                 const SizedBox(height: 24),
               ],
+
+              // ── Comment Section ────────────────────────────────
+              _sectionHeader('Comments / Notes (Optional)'),
+              const SizedBox(height: 12),
+              _buildCommentField(),
+              const SizedBox(height: 24),
 
               // ── Submit Button ──────────────────────────────────
               SizedBox(
@@ -793,5 +810,24 @@ class _ShiftReportFormScreenState extends State<ShiftReportFormScreen> {
         ],
       ),
     ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0);
+  }
+
+  Widget _buildCommentField() {
+    return TextFormField(
+      controller: _commentCtrl,
+      keyboardType: TextInputType.multiline,
+      minLines: 3,
+      maxLines: 6,
+      textCapitalization: TextCapitalization.sentences,
+      decoration: InputDecoration(
+        labelText: 'Comments / Remarks',
+        hintText: 'Enter any shift notes, remarks, handover details, or explanations here...',
+        alignLabelWithHint: true,
+        prefixIcon: const Padding(
+          padding: EdgeInsets.only(bottom: 48),
+          child: Icon(Icons.comment_outlined, color: AppTheme.accent, size: 20),
+        ),
+      ),
+    );
   }
 }
